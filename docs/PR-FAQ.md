@@ -8,7 +8,7 @@
 
 **Las Vegas, NV** — Panova today announced Portia, a health data interchange service that allows independent practitioners and small clinics to import and export patient records across multiple industry formats. Portia eliminates the technical barriers that have historically prevented smaller practices from participating in health information exchange.
 
-"When a patient arrives with records from another provider, practices shouldn't need an IT department to access that information," said [CEO Name], CEO of Panova. "Portia makes health data exchange as simple as uploading a file."
+"When a patient arrives with records from another provider, practices shouldn't need an IT department to access that information," said Jay Sreedharan, CEO of Panova. "Portia makes health data exchange as simple as uploading a file."
 
 **The Problem:** Independent practitioners and small clinics often receive patient records as C-CDA documents, HL7 messages, or FHIR bundles from hospitals, labs, and other providers. Without expensive integration infrastructure, this data sits in inboxes as unstructured files, forcing staff to manually re-enter information—wasting time and introducing errors.
 
