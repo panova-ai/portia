@@ -18,6 +18,7 @@ Panova's health data interchange service for importing and exporting patient rec
 
 ## Documentation
 
+- [PR-FAQ](docs/PR-FAQ.md)
 - [Implementation Plan](docs/portia-implementation-plan.md)
 
 ## Status
