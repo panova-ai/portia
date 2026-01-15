@@ -1,0 +1,6 @@
+config:
+  gcp:project: panova-dev
+  gcp:region: us-central1
+  portia:imageTag: latest
+  portia:minInstances: "0"
+  portia:maxInstances: "3"

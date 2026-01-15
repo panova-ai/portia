@@ -1,0 +1,6 @@
+name: portia
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: Portia Health Data Interchange Service infrastructure

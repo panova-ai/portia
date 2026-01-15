@@ -1,0 +1,146 @@
+"""Test configuration and fixtures."""
+
+from typing import AsyncGenerator, Generator, Protocol
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from src.clients.ms_converter import get_ms_converter_service
+from src.clients.storage import get_storage_service
+from src.main import app
+from src.services.ms_converter_service import MSConverterService
+from src.services.storage_service import StorageService
+
+
+@pytest.fixture(scope="session")
+def anyio_backend() -> str:
+    """Configure pytest-anyio to use asyncio."""
+    return "asyncio"
+
+
+@pytest.fixture
+def mock_storage_service() -> MagicMock:
+    """Mock storage service for testing."""
+    mock = MagicMock(spec=StorageService)
+    mock.upload_temp_file.return_value = "imports/test/file.xml"
+    mock.get_temp_file.return_value = b"<test>content</test>"
+    mock.delete_temp_file.return_value = True
+    mock.exists.return_value = True
+    mock.upload_export_file.return_value = "exports/test/bundle.json"
+    mock.generate_export_download_url.return_value = (
+        "https://storage.googleapis.com/test/exports/test/bundle.json?signed=true"
+    )
+    return mock
+
+
+@pytest.fixture
+def mock_ms_converter_service() -> AsyncMock:
+    """Mock MS FHIR Converter service for testing."""
+    mock = AsyncMock(spec=MSConverterService)
+
+    # Default successful conversion response
+    mock.convert_ccda.return_value = {
+        "resourceType": "Bundle",
+        "type": "collection",
+        "entry": [
+            {
+                "fullUrl": "urn:uuid:patient-1",
+                "resource": {
+                    "resourceType": "Patient",
+                    "id": "patient-1",
+                    "name": [{"family": "Test", "given": ["John"]}],
+                },
+            },
+            {
+                "fullUrl": "urn:uuid:condition-1",
+                "resource": {
+                    "resourceType": "Condition",
+                    "id": "condition-1",
+                    "clinicalStatus": {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                                "code": "active",
+                            }
+                        ]
+                    },
+                },
+            },
+        ],
+    }
+    mock.convert_hl7v2.return_value = {
+        "resourceType": "Bundle",
+        "type": "collection",
+        "entry": [],
+    }
+    mock.health_check.return_value = True
+    return mock
+
+
+class ClientFactory(Protocol):
+    """Protocol for client factory fixture."""
+
+    def __call__(self) -> AsyncClient: ...
+
+
+@pytest.fixture
+def client_factory(
+    mock_storage_service: MagicMock,
+    mock_ms_converter_service: AsyncMock,
+) -> Generator[ClientFactory, None, None]:
+    """Factory for creating test clients with mocked dependencies."""
+
+    def _create_client() -> AsyncClient:
+        app.dependency_overrides[get_storage_service] = lambda: mock_storage_service
+        app.dependency_overrides[get_ms_converter_service] = (
+            lambda: mock_ms_converter_service
+        )
+
+        transport = ASGITransport(app=app)
+        return AsyncClient(transport=transport, base_url="http://testserver")
+
+    yield _create_client
+
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+async def client(
+    client_factory: ClientFactory,
+) -> AsyncGenerator[AsyncClient, None]:
+    """Async client for testing endpoints."""
+    async with client_factory() as c:
+        yield c
+
+
+# Sample C-CDA content for testing
+SAMPLE_CCDA = """<?xml version="1.0" encoding="UTF-8"?>
+<ClinicalDocument xmlns="urn:hl7-org:v3">
+  <templateId root="2.16.840.1.113883.10.20.22.1.2"/>
+  <recordTarget>
+    <patientRole>
+      <patient>
+        <name>
+          <given>John</given>
+          <family>Test</family>
+        </name>
+      </patient>
+    </patientRole>
+  </recordTarget>
+  <component>
+    <structuredBody>
+      <component>
+        <section>
+          <title>Problems</title>
+        </section>
+      </component>
+    </structuredBody>
+  </component>
+</ClinicalDocument>"""
+
+
+@pytest.fixture
+def sample_ccda() -> str:
+    """Sample C-CDA document for testing."""
+    return SAMPLE_CCDA

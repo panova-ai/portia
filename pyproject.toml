@@ -1,0 +1,71 @@
+[project]
+name = "portia"
+version = "0.1.0"
+description = "Panova Health Data Interchange Service"
+
+[tool.poetry]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.12,<4.0"
+fastapi = { version = "^0.115.0", extras = ["standard"] }
+uvicorn = { version = "^0.34.0", extras = ["standard"] }
+pydantic = "^2.10.0"
+pydantic-settings = "^2.9.0"
+httpx = "^0.28.0"
+google-cloud-storage = "^2.18.0"
+google-auth = "^2.40.0"
+defusedxml = "^0.7.1"
+
+[tool.poetry.group.test.dependencies]
+pytest = "^8.4.0"
+pytest-env = "^1.1.0"
+pytest-anyio = "^0.0.0"
+
+[tool.poetry.group.dev.dependencies]
+black = "^25.1.0"
+isort = "^6.0.0"
+mypy = "^1.16.0"
+ruff = "^0.11.0"
+pre-commit = "^4.0.0"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.isort]
+profile = "black"
+
+[tool.pytest.ini_options]
+env = [
+    "GCP_PROJECT_ID=portia-test",
+    "MS_CONVERTER_URL=http://localhost:8080",
+]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+
+[tool.mypy]
+exclude = ["infrastructure/*"]
+strict = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = [
+    "google.cloud.*",
+    "google.oauth2.*",
+    "defusedxml.*",
+]
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]
