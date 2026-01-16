@@ -54,6 +54,7 @@ plugins = ["pydantic.mypy"]
 module = [
     "google.cloud.*",
     "google.oauth2.*",
+    "google.auth.*",
     "defusedxml.*",
 ]
 ignore_missing_imports = true

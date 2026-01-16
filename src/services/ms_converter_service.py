@@ -11,6 +11,7 @@ from typing import Any
 import google.auth.transport.requests  # type: ignore[import-untyped]
 import httpx
 from google.auth import default as google_auth_default  # type: ignore[import-untyped]
+from google.oauth2 import id_token  # type: ignore[import-untyped]
 from pydantic import BaseModel
 
 from src.settings import settings
@@ -112,16 +113,23 @@ class MSConverterService:
         self._client: httpx.AsyncClient | None = None
 
     def _get_identity_token(self) -> str | None:
-        """Get an identity token for Cloud Run service-to-service auth."""
+        """Get an ID token for Cloud Run service-to-service auth."""
         try:
-            credentials, _ = google_auth_default()
+            # For Cloud Run service-to-service auth, we need an ID token
+            # with the target service URL as the audience
             auth_request = google.auth.transport.requests.Request()
-            credentials.refresh(auth_request)
-            # Get ID token for the target audience (MS Converter URL)
-            if hasattr(credentials, "token"):
-                return str(credentials.token)
+            token = id_token.fetch_id_token(auth_request, self.base_url)
+            return str(token)
         except Exception:
-            pass
+            # Fallback: try using default credentials (works in some environments)
+            try:
+                credentials, _ = google_auth_default()
+                auth_request = google.auth.transport.requests.Request()
+                credentials.refresh(auth_request)
+                if hasattr(credentials, "token"):
+                    return str(credentials.token)
+            except Exception:
+                pass
         return None
 
     async def _get_client(self) -> httpx.AsyncClient:
