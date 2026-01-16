@@ -1,0 +1,7 @@
+config:
+  gcp:project: panova-staging
+  gcp:region: us-central1
+  portia:imageTag: latest
+  portia:minInstances: "0"
+  portia:maxInstances: "5"
+encryptionsalt: v1:96zFS17cMhY=:v1:h01lKhLSAOyyqLe5:+tQom2v/Mnlp2d9jLm0VJpwuLWsl3A==

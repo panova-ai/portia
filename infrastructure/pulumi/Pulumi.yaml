@@ -2,5 +2,5 @@ name: portia
 runtime:
   name: python
   options:
-    virtualenv: venv
+    toolchain: poetry
 description: Portia Health Data Interchange Service infrastructure
