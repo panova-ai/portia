@@ -20,6 +20,8 @@ on:
 env:
   REGION: us-central1
   SERVICE_NAME: portia
+  ARTIFACT_PROJECT: panova-461721
+  ARTIFACT_REPO: agents-repo
   WIF_PROVIDER: projects/766608563176/locations/global/workloadIdentityPools/github-pool/providers/github-provider
   WIF_SERVICE_ACCOUNT: github-actions@panova-461721.iam.gserviceaccount.com
 
@@ -117,7 +119,7 @@ jobs:
       - name: Build and push Docker image
         id: build
         run: |
-          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ needs.determine-environment.outputs.project_id }}/portia/portia:${{ github.sha }}"
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.ARTIFACT_PROJECT }}/${{ env.ARTIFACT_REPO }}/portia:${{ github.sha }}"
           docker build -t $IMAGE .
           docker push $IMAGE
           echo "image=$IMAGE" >> $GITHUB_OUTPUT
@@ -197,11 +199,11 @@ jobs:
         run: |
           # Pull from Microsoft Container Registry
           docker pull mcr.microsoft.com/healthcareapis/fhir-converter:1.0.367-preview
-          # Tag for our Artifact Registry
+          # Tag for central Artifact Registry
           docker tag mcr.microsoft.com/healthcareapis/fhir-converter:1.0.367-preview \
-            ${{ env.REGION }}-docker.pkg.dev/${{ needs.determine-environment.outputs.project_id }}/portia/ms-fhir-converter:latest
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.ARTIFACT_PROJECT }}/${{ env.ARTIFACT_REPO }}/ms-fhir-converter:latest
           # Push to Artifact Registry
-          docker push ${{ env.REGION }}-docker.pkg.dev/${{ needs.determine-environment.outputs.project_id }}/portia/ms-fhir-converter:latest
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.ARTIFACT_PROJECT }}/${{ env.ARTIFACT_REPO }}/ms-fhir-converter:latest
 
       - name: Deploy MS FHIR Converter to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v2
@@ -209,7 +211,7 @@ jobs:
           service: ms-fhir-converter
           region: ${{ env.REGION }}
           project_id: ${{ needs.determine-environment.outputs.project_id }}
-          image: ${{ env.REGION }}-docker.pkg.dev/${{ needs.determine-environment.outputs.project_id }}/portia/ms-fhir-converter:latest
+          image: ${{ env.REGION }}-docker.pkg.dev/${{ env.ARTIFACT_PROJECT }}/${{ env.ARTIFACT_REPO }}/ms-fhir-converter:latest
           flags: |
             --memory=2Gi
             --cpu=2

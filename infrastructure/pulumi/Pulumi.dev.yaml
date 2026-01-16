@@ -4,3 +4,4 @@ config:
   portia:imageTag: latest
   portia:minInstances: "0"
   portia:maxInstances: "3"
+encryptionsalt: v1:uJVCrfYRA8g=:v1:vHnHBmutLahEJh+d:1NpJqMPPRrCaV+SLTPG2ptGazLTlsA==
