@@ -144,6 +144,7 @@ jobs:
         with:
           service: ${{ env.SERVICE_NAME }}
           region: ${{ env.REGION }}
+          project_id: ${{ needs.determine-environment.outputs.project_id }}
           image: ${{ needs.build-and-push.outputs.image }}
           env_vars: |
             GCP_PROJECT_ID=${{ needs.determine-environment.outputs.project_id }}
@@ -176,9 +177,9 @@ jobs:
       - name: Copy MS FHIR Converter image to Artifact Registry
         run: |
           # Pull from Microsoft Container Registry
-          docker pull mcr.microsoft.com/healthcareapis/fhir-converter:latest
+          docker pull mcr.microsoft.com/healthcareapis/fhir-converter:1.0.367-preview
           # Tag for our Artifact Registry
-          docker tag mcr.microsoft.com/healthcareapis/fhir-converter:latest \
+          docker tag mcr.microsoft.com/healthcareapis/fhir-converter:1.0.367-preview \
             ${{ env.REGION }}-docker.pkg.dev/${{ needs.determine-environment.outputs.project_id }}/portia/ms-fhir-converter:latest
           # Push to Artifact Registry
           docker push ${{ env.REGION }}-docker.pkg.dev/${{ needs.determine-environment.outputs.project_id }}/portia/ms-fhir-converter:latest
@@ -188,6 +189,7 @@ jobs:
         with:
           service: ms-fhir-converter
           region: ${{ env.REGION }}
+          project_id: ${{ needs.determine-environment.outputs.project_id }}
           image: ${{ env.REGION }}-docker.pkg.dev/${{ needs.determine-environment.outputs.project_id }}/portia/ms-fhir-converter:latest
           flags: |
             --memory=2Gi
