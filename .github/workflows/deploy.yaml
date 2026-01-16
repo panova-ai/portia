@@ -139,6 +139,23 @@ jobs:
           workload_identity_provider: ${{ env.WIF_PROVIDER }}
           service_account: ${{ env.WIF_SERVICE_ACCOUNT }}
 
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Get MS Converter URL
+        id: ms-converter
+        run: |
+          # Get the actual MS Converter URL from the deployed service
+          MS_URL=$(gcloud run services describe ms-fhir-converter \
+            --region=${{ env.REGION }} \
+            --project=${{ needs.determine-environment.outputs.project_id }} \
+            --format="value(status.url)" 2>/dev/null || echo "")
+          if [ -z "$MS_URL" ]; then
+            echo "MS Converter not deployed yet, using placeholder"
+            MS_URL="https://ms-fhir-converter-placeholder.run.app"
+          fi
+          echo "url=$MS_URL" >> $GITHUB_OUTPUT
+
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v2
         with:
@@ -149,7 +166,7 @@ jobs:
           env_vars: |
             GCP_PROJECT_ID=${{ needs.determine-environment.outputs.project_id }}
             GCP_REGION=${{ env.REGION }}
-            MS_CONVERTER_URL=https://ms-fhir-converter-${{ needs.determine-environment.outputs.project_id }}.run.app
+            MS_CONVERTER_URL=${{ steps.ms-converter.outputs.url }}
             TEMP_BUCKET=${{ needs.determine-environment.outputs.project_id }}-portia-temp
             EXPORTS_BUCKET=${{ needs.determine-environment.outputs.project_id }}-portia-exports
 
