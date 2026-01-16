@@ -47,6 +47,16 @@ class Settings(BaseSettings):
         description="FHIR store name within the dataset",
     )
 
+    # Sentia API Configuration
+    sentia_url: str = Field(
+        default="http://localhost:8002",
+        description="URL of the Sentia backend service",
+    )
+    sentia_timeout: float = Field(
+        default=30.0,
+        description="Timeout for Sentia API requests in seconds",
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

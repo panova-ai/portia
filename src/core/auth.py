@@ -74,6 +74,9 @@ class AuthenticatedUser(BaseModel):
     service_name: str | None = None
     permissions: list[str] = []
 
+    # Raw token for forwarding to other services (e.g., Sentia)
+    raw_token: str | None = None
+
     # Full payloads for detailed access
     firebase_payload: dict[str, Any] | None = None
     service_payload: ServiceTokenPayload | None = None
@@ -241,6 +244,7 @@ async def get_current_user(request: Request) -> AuthenticatedUser:
                 auth_type="firebase",
                 user_id=firebase_payload.get("user_id"),
                 email=firebase_payload.get("email"),
+                raw_token=bearer_token,
                 firebase_payload=dict(firebase_payload),
             )
         except HTTPException:
@@ -253,6 +257,7 @@ async def get_current_user(request: Request) -> AuthenticatedUser:
                 auth_type="service",
                 service_name=service_payload.service_name,
                 permissions=service_payload.permissions,
+                raw_token=bearer_token,
                 service_payload=service_payload,
             )
         except HTTPException:
@@ -267,6 +272,7 @@ async def get_current_user(request: Request) -> AuthenticatedUser:
                 auth_type="service",
                 service_name=service_payload.service_name,
                 permissions=service_payload.permissions,
+                raw_token=service_token,
                 service_payload=service_payload,
             )
         except HTTPException:
@@ -281,6 +287,7 @@ async def get_current_user(request: Request) -> AuthenticatedUser:
                 auth_type="firebase",
                 user_id=firebase_payload.get("user_id"),
                 email=firebase_payload.get("email"),
+                raw_token=cookie_token,
                 firebase_payload=dict(firebase_payload),
             )
         except HTTPException:

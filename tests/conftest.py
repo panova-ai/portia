@@ -2,16 +2,28 @@
 
 from typing import AsyncGenerator, Generator, Protocol
 from unittest.mock import AsyncMock, MagicMock
+from uuid import UUID
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from src.clients.ms_converter import get_ms_converter_service
+from src.clients.sentia import get_sentia_service
 from src.clients.storage import get_storage_service
 from src.core.auth import AuthenticatedUser, get_current_user
 from src.main import app
 from src.services.ms_converter_service import MSConverterService
+from src.services.sentia_service import (
+    OrganizationContext,
+    PractitionerContext,
+    PractitionerOrgContext,
+    SentiaService,
+)
 from src.services.storage_service import StorageService
+
+# Test UUIDs
+TEST_PRACTITIONER_ID = UUID("00000000-0000-0000-0000-000000000001")
+TEST_ORGANIZATION_ID = UUID("00000000-0000-0000-0000-000000000002")
 
 
 @pytest.fixture(scope="session")
@@ -80,12 +92,42 @@ def mock_ms_converter_service() -> AsyncMock:
 
 
 @pytest.fixture
+def mock_sentia_service() -> AsyncMock:
+    """Mock Sentia service for testing."""
+    mock = AsyncMock(spec=SentiaService)
+
+    # Default context response
+    default_context = PractitionerOrgContext(
+        practitioner=PractitionerContext(
+            id=TEST_PRACTITIONER_ID,
+            name="Test Practitioner",
+            email="test@panova.health",
+        ),
+        organizations=[
+            OrganizationContext(
+                id=TEST_ORGANIZATION_ID,
+                name="Test Organization",
+            )
+        ],
+        default_organization=OrganizationContext(
+            id=TEST_ORGANIZATION_ID,
+            name="Test Organization",
+        ),
+    )
+
+    mock.get_practitioner_context.return_value = default_context
+    mock.validate_practitioner_org_access.return_value = default_context
+    return mock
+
+
+@pytest.fixture
 def mock_authenticated_user() -> AuthenticatedUser:
     """Mock authenticated user for testing."""
     return AuthenticatedUser(
         auth_type="firebase",
         user_id="test-user-id",
         email="test@panova.health",
+        raw_token="test-firebase-token",
     )
 
 
@@ -99,6 +141,7 @@ class ClientFactory(Protocol):
 def client_factory(
     mock_storage_service: MagicMock,
     mock_ms_converter_service: AsyncMock,
+    mock_sentia_service: AsyncMock,
     mock_authenticated_user: AuthenticatedUser,
 ) -> Generator[ClientFactory, None, None]:
     """Factory for creating test clients with mocked dependencies."""
@@ -108,6 +151,7 @@ def client_factory(
         app.dependency_overrides[get_ms_converter_service] = (
             lambda: mock_ms_converter_service
         )
+        app.dependency_overrides[get_sentia_service] = lambda: mock_sentia_service
         app.dependency_overrides[get_current_user] = lambda: mock_authenticated_user
 
         transport = ASGITransport(app=app)
