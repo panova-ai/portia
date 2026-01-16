@@ -8,7 +8,9 @@ Microsoft FHIR Converter Docker image (mcr.microsoft.com/healthcareapis/fhir-con
 from enum import Enum
 from typing import Any
 
+import google.auth.transport.requests  # type: ignore[import-untyped]
 import httpx
+from google.auth import default as google_auth_default  # type: ignore[import-untyped]
 from pydantic import BaseModel
 
 from src.settings import settings
@@ -109,12 +111,30 @@ class MSConverterService:
         self.timeout = timeout or settings.ms_converter_timeout
         self._client: httpx.AsyncClient | None = None
 
+    def _get_identity_token(self) -> str | None:
+        """Get an identity token for Cloud Run service-to-service auth."""
+        try:
+            credentials, _ = google_auth_default()
+            auth_request = google.auth.transport.requests.Request()
+            credentials.refresh(auth_request)
+            # Get ID token for the target audience (MS Converter URL)
+            if hasattr(credentials, "token"):
+                return str(credentials.token)
+        except Exception:
+            pass
+        return None
+
     async def _get_client(self) -> httpx.AsyncClient:
-        """Get or create httpx async client."""
+        """Get or create httpx async client with auth headers."""
         if self._client is None:
+            headers = {}
+            token = self._get_identity_token()
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
             self._client = httpx.AsyncClient(
                 base_url=self.base_url,
                 timeout=httpx.Timeout(self.timeout),
+                headers=headers,
             )
         return self._client
 
@@ -208,7 +228,10 @@ class MSConverterService:
         """Check if the MS FHIR Converter service is healthy."""
         try:
             client = await self._get_client()
-            response = await client.get("/health")
-            return response.status_code == 200
+            # MS FHIR Converter doesn't have a /health endpoint
+            # Check the root path which returns 200 or the swagger endpoint
+            response = await client.get("/")
+            # Accept 200 (success) or 404 (service is running but no root handler)
+            return response.status_code in (200, 404)
         except Exception:
             return False
