@@ -12,7 +12,7 @@ repos:
     rev: 25.1.0
     hooks:
       - id: black
-        language_version: python3.12
+        language_version: python3.13
 
   - repo: https://github.com/pycqa/isort
     rev: 6.0.0
@@ -21,19 +21,18 @@ repos:
         args: ["--profile", "black"]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.0
+    rev: v0.11.12
     hooks:
-      - id: ruff
+      - id: ruff-check
+        language_version: python3.13
         args: ["--fix"]
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.16.0
+  - repo: local
     hooks:
       - id: mypy
-        additional_dependencies:
-          - pydantic>=2.0
-          - pydantic-settings>=2.0
-          - fastapi>=0.100
-          - httpx>=0.25
-          - types-defusedxml
-        args: ["--ignore-missing-imports"]
+        name: mypy
+        entry: poetry run mypy src/
+        language: system
+        types: [python]
+        pass_filenames: false
+        files: ^src/

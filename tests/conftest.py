@@ -8,6 +8,7 @@ from httpx import ASGITransport, AsyncClient
 
 from src.clients.ms_converter import get_ms_converter_service
 from src.clients.storage import get_storage_service
+from src.core.auth import AuthenticatedUser, get_current_user
 from src.main import app
 from src.services.ms_converter_service import MSConverterService
 from src.services.storage_service import StorageService
@@ -78,6 +79,16 @@ def mock_ms_converter_service() -> AsyncMock:
     return mock
 
 
+@pytest.fixture
+def mock_authenticated_user() -> AuthenticatedUser:
+    """Mock authenticated user for testing."""
+    return AuthenticatedUser(
+        auth_type="firebase",
+        user_id="test-user-id",
+        email="test@panova.health",
+    )
+
+
 class ClientFactory(Protocol):
     """Protocol for client factory fixture."""
 
@@ -88,6 +99,7 @@ class ClientFactory(Protocol):
 def client_factory(
     mock_storage_service: MagicMock,
     mock_ms_converter_service: AsyncMock,
+    mock_authenticated_user: AuthenticatedUser,
 ) -> Generator[ClientFactory, None, None]:
     """Factory for creating test clients with mocked dependencies."""
 
@@ -96,6 +108,7 @@ def client_factory(
         app.dependency_overrides[get_ms_converter_service] = (
             lambda: mock_ms_converter_service
         )
+        app.dependency_overrides[get_current_user] = lambda: mock_authenticated_user
 
         transport = ASGITransport(app=app)
         return AsyncClient(transport=transport, base_url="http://testserver")

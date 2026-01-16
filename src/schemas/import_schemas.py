@@ -25,19 +25,59 @@ class ImportStatus(str, Enum):
     FAILED = "failed"
 
 
+class MatchingOptions(BaseModel):
+    """Options for patient matching during import."""
+
+    patient_id: UUID | None = Field(
+        default=None,
+        description="If provided, use this existing Patient (skips matching)",
+    )
+    person_id: UUID | None = Field(
+        default=None,
+        description="If provided, use this existing Person (skips person matching)",
+    )
+    create_if_not_found: bool = Field(
+        default=True,
+        description="Create new Person/Patient if no match found",
+    )
+    strict_matching: bool = Field(
+        default=False,
+        description="If true, fail import when no match found instead of creating",
+    )
+
+
 class ImportRequest(BaseModel):
     """Request model for importing health data."""
 
     format: ImportFormat = Field(description="Format of the input data")
-    organization_id: UUID = Field(description="Target organization ID")
     data: str = Field(description="Base64-encoded input data")
-    patient_id: UUID | None = Field(
+
+    # Context - defaults to current user's context if not provided
+    organization_id: UUID | None = Field(
         default=None,
-        description="Optional: existing patient to match",
+        description="Target organization ID. Defaults to current user's organization.",
     )
+    practitioner_id: UUID | None = Field(
+        default=None,
+        description="Target practitioner ID. Defaults to current user.",
+    )
+
+    # Patient matching options
+    matching: MatchingOptions | None = Field(
+        default=None,
+        description="Patient matching options",
+    )
+
+    # Metadata
     metadata: dict[str, str] | None = Field(
         default=None,
         description="Optional metadata (source_system, document_type, etc.)",
+    )
+
+    # Legacy field - use matching.patient_id instead
+    patient_id: UUID | None = Field(
+        default=None,
+        description="Legacy: use matching.patient_id instead",
     )
 
 
@@ -52,8 +92,36 @@ class ResourceCounts(BaseModel):
     Observation: int = 0
     Procedure: int = 0
     Encounter: int = 0
+    Composition: int = 0
     DiagnosticReport: int = 0
     DocumentReference: int = 0
+    Practitioner: int = 0
+    Organization: int = 0
+
+
+class MatchingResult(BaseModel):
+    """Result of patient/person matching during import."""
+
+    person_id: UUID | None = Field(
+        default=None,
+        description="ID of the matched or created Person resource",
+    )
+    patient_id: UUID | None = Field(
+        default=None,
+        description="ID of the matched or created Patient resource",
+    )
+    person_created: bool = Field(
+        default=False,
+        description="True if a new Person was created",
+    )
+    patient_created: bool = Field(
+        default=False,
+        description="True if a new Patient was created",
+    )
+    match_method: str | None = Field(
+        default=None,
+        description="How the match was made (e.g., 'demographics', 'provided_id')",
+    )
 
 
 class ImportResponse(BaseModel):
@@ -68,6 +136,10 @@ class ImportResponse(BaseModel):
     resources_extracted: ResourceCounts = Field(
         default_factory=ResourceCounts,
         description="Count of resources extracted by type",
+    )
+    matching_result: MatchingResult | None = Field(
+        default=None,
+        description="Result of patient matching (if matching was performed)",
     )
     warnings: list[str] = Field(
         default_factory=list,

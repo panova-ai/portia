@@ -8,10 +8,10 @@ Microsoft FHIR Converter Docker image (mcr.microsoft.com/healthcareapis/fhir-con
 from enum import Enum
 from typing import Any
 
-import google.auth.transport.requests  # type: ignore[import-untyped]
+import google.auth.transport.requests
 import httpx
-from google.auth import default as google_auth_default  # type: ignore[import-untyped]
-from google.oauth2 import id_token  # type: ignore[import-untyped]
+from google.auth import default as google_auth_default
+from google.oauth2 import id_token
 from pydantic import BaseModel
 
 from src.settings import settings
@@ -117,14 +117,14 @@ class MSConverterService:
         try:
             # For Cloud Run service-to-service auth, we need an ID token
             # with the target service URL as the audience
-            auth_request = google.auth.transport.requests.Request()
-            token = id_token.fetch_id_token(auth_request, self.base_url)
+            auth_request = google.auth.transport.requests.Request()  # type: ignore[no-untyped-call]
+            token = id_token.fetch_id_token(auth_request, self.base_url)  # type: ignore[no-untyped-call]
             return str(token)
         except Exception:
             # Fallback: try using default credentials (works in some environments)
             try:
-                credentials, _ = google_auth_default()
-                auth_request = google.auth.transport.requests.Request()
+                credentials, _ = google_auth_default()  # type: ignore[no-untyped-call]
+                auth_request = google.auth.transport.requests.Request()  # type: ignore[no-untyped-call]
                 credentials.refresh(auth_request)
                 if hasattr(credentials, "token"):
                     return str(credentials.token)

@@ -9,7 +9,9 @@ from typing import Any
 
 from src.schemas.import_schemas import ResourceCounts
 from src.transform.r4_to_r5.allergy import transform_allergy_intolerance
+from src.transform.r4_to_r5.composition import transform_composition
 from src.transform.r4_to_r5.condition import transform_condition
+from src.transform.r4_to_r5.encounter import transform_encounter
 from src.transform.r4_to_r5.immunization import transform_immunization
 from src.transform.r4_to_r5.medication import transform_medication_statement
 from src.transform.r4_to_r5.observation import transform_observation
@@ -23,6 +25,8 @@ RESOURCE_TRANSFORMERS: dict[str, Any] = {
     "AllergyIntolerance": transform_allergy_intolerance,
     "Immunization": transform_immunization,
     "Observation": transform_observation,
+    "Encounter": transform_encounter,
+    "Composition": transform_composition,
 }
 
 

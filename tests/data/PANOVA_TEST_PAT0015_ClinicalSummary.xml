@@ -8,7 +8,7 @@
    <templateId root="2.16.840.1.113883.10.20.22.1.2"/>
    <id root="aca524f1-c790-3ee7-a4d5-550df0f73860"/>
    <code code="34133-9" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC" displayName="Clinical Summary"/>
-   <title>Clinical Summary of FIRSTNAME LASTNAME</title>
+   <title>Clinical Summary of Elkind Testpatientone</title>
    <effectiveTime value="20260102134610-0800"/>
    <confidentialityCode code="N" codeSystem="2.16.840.1.113883.5.25"/>
    <languageCode code="en-US"/>
@@ -26,8 +26,8 @@
          <telecom value="mailto:britt@bigandbrightpr.com"/>
          <patient>
             <name use="L">
-               <given>FIRSTNAME</given>
-               <family>LASTNAME</family>
+               <given>Elkind</given>
+               <family>Testpatientone</family>
             </name>
             <administrativeGenderCode code="F" codeSystem="2.16.840.1.113883.5.1" codeSystemName="AdministrativeGender" displayName="female"/>
             <birthTime value="19801223"/>

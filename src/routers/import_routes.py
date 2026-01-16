@@ -1,11 +1,15 @@
 """Import endpoint for health data."""
 
+import logging
+
 from fastapi import APIRouter, HTTPException, status
 
 from src.exceptions import ConversionError, ValidationError
 from src.import_.gateway import process_import
-from src.routers.deps import MSConverterServiceDep
+from src.routers.deps import CurrentUserDep, MSConverterServiceDep
 from src.schemas.import_schemas import ImportRequest, ImportResponse
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/import", tags=["Import"])
 
@@ -14,9 +18,12 @@ router = APIRouter(prefix="/import", tags=["Import"])
 async def import_data(
     request: ImportRequest,
     ms_converter: MSConverterServiceDep,
+    current_user: CurrentUserDep,
 ) -> ImportResponse:
     """
     Import health data from various formats.
+
+    Requires authentication via Firebase token or service token.
 
     Supported formats:
     - C-CDA: Clinical documents from other EHRs
@@ -25,6 +32,12 @@ async def import_data(
 
     The data is converted to FHIR R5 format and returned in the response.
     """
+    logger.info(
+        "Import request from %s (auth_type=%s)",
+        current_user.email or current_user.service_name,
+        current_user.auth_type,
+    )
+
     try:
         response = await process_import(request, ms_converter)
         return response
