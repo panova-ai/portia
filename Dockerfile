@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 # Set working directory
 WORKDIR /app
@@ -10,6 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install poetry
 RUN pip install --no-cache-dir poetry==2.1.1
+
+# Copy fhir_client from sentia (must be copied into build context)
+COPY sentia/packages/fhir_client /sentia/packages/fhir_client
 
 # Copy dependency files
 COPY pyproject.toml poetry.lock* ./
