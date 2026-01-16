@@ -150,6 +150,8 @@ jobs:
             GCP_PROJECT_ID=${{ needs.determine-environment.outputs.project_id }}
             GCP_REGION=${{ env.REGION }}
             MS_CONVERTER_URL=https://ms-fhir-converter-${{ needs.determine-environment.outputs.project_id }}.run.app
+            TEMP_BUCKET=${{ needs.determine-environment.outputs.project_id }}-portia-temp
+            EXPORTS_BUCKET=${{ needs.determine-environment.outputs.project_id }}-portia-exports
 
   deploy-ms-converter:
     needs: [determine-environment, test]
