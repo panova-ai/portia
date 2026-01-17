@@ -27,6 +27,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+import google.auth
+import google.auth.transport.requests
 import httpx
 import jwt
 from google.cloud import secretmanager
@@ -37,16 +39,19 @@ ENVIRONMENTS = {
         "portia_url": "https://portia-mzpxirbrgq-uc.a.run.app",
         "sentia_url": "https://backend-mzpxirbrgq-uc.a.run.app",
         "project_id": "panova-dev",
+        "fhir_store": "projects/panova-dev/locations/us-central1/datasets/healthcare_dataset/fhirStores/fhir_store",
     },
     "staging": {
         "portia_url": "https://portia-yqadsx4ooa-uc.a.run.app",
         "sentia_url": "https://backend-yqadsx4ooa-uc.a.run.app",
         "project_id": "panova-staging",
+        "fhir_store": "projects/panova-staging/locations/us-central1/datasets/healthcare_dataset/fhirStores/fhir_store",
     },
     "prod": {
         "portia_url": "https://portia-prod.panova.health",
         "sentia_url": "https://backend-prod.panova.health",
         "project_id": "panova-prod",
+        "fhir_store": "projects/panova-prod/locations/us-central1/datasets/healthcare_dataset/fhirStores/fhir_store",
     },
 }
 
@@ -146,6 +151,65 @@ def lookup_practitioner_by_email(
         "organization_id": organization_id,
         "practitioner_name": practitioner.get("name"),
     }
+
+
+def get_fhir_access_token() -> str:
+    """Get Google Cloud access token for FHIR API."""
+    credentials, _ = google.auth.default(
+        scopes=["https://www.googleapis.com/auth/cloud-healthcare"]
+    )
+    auth_req = google.auth.transport.requests.Request()
+    credentials.refresh(auth_req)
+    return credentials.token  # type: ignore[return-value]
+
+
+def lookup_organization_for_practitioner(
+    fhir_store: str,
+    practitioner_id: str,
+) -> str | None:
+    """
+    Look up organization for a practitioner via FHIR PractitionerRole.
+
+    Args:
+        fhir_store: Full FHIR store path
+        practitioner_id: Practitioner resource ID (UUID)
+
+    Returns:
+        Organization ID or None if not found
+    """
+    access_token = get_fhir_access_token()
+    fhir_url = f"https://healthcare.googleapis.com/v1/{fhir_store}/fhir"
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/fhir+json",
+    }
+
+    # Search for PractitionerRole where practitioner matches
+    response = httpx.get(
+        f"{fhir_url}/PractitionerRole",
+        headers=headers,
+        params={"practitioner": f"Practitioner/{practitioner_id}"},
+        timeout=30.0,
+    )
+
+    if response.status_code != 200:
+        return None
+
+    bundle = response.json()
+    entries = bundle.get("entry", [])
+
+    if not entries:
+        return None
+
+    # Get organization reference from first PractitionerRole
+    role = entries[0].get("resource", {})
+    org_ref = role.get("organization", {}).get("reference", "")
+
+    if org_ref.startswith("Organization/"):
+        return org_ref.replace("Organization/", "")
+
+    return None
 
 
 def import_ccda(
@@ -261,9 +325,13 @@ Examples:
         print(f"Error: File not found: {args.file_path}", file=sys.stderr)
         sys.exit(1)
 
-    if not args.practitioner_email and not args.organization_id:
+    if (
+        not args.practitioner_email
+        and not args.organization_id
+        and not args.practitioner_id
+    ):
         print(
-            "Error: Either practitioner_email or --org-id must be provided",
+            "Error: Provide practitioner_email, --practitioner-id, or --org-id",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -325,15 +393,31 @@ Examples:
 
         except Exception as e:
             print(f"Error looking up practitioner: {e}", file=sys.stderr)
-            if not organization_id:
+            if not organization_id and not practitioner_id:
                 print(
-                    "Provide --org-id to continue without practitioner lookup.",
+                    "Provide --org-id or --practitioner-id to continue.",
                     file=sys.stderr,
                 )
                 sys.exit(1)
 
+    # If we have practitioner_id but no org_id, look up org from FHIR
+    if practitioner_id and not organization_id:
+        print(f"Looking up organization for practitioner {practitioner_id}...")
+        try:
+            organization_id = lookup_organization_for_practitioner(
+                env_config["fhir_store"],
+                practitioner_id,
+            )
+            if organization_id:
+                print(f"  Found organization: {organization_id}")
+            else:
+                print("  No organization found for practitioner", file=sys.stderr)
+        except Exception as e:
+            print(f"Error looking up organization: {e}", file=sys.stderr)
+
     if not organization_id:
         print("Error: Could not determine organization ID", file=sys.stderr)
+        print("Provide --org-id explicitly.", file=sys.stderr)
         sys.exit(1)
 
     if args.dry_run:

@@ -15,6 +15,7 @@ from typing import Any
 from uuid import uuid4
 
 from src.exceptions import ConversionError, ValidationError
+from src.import_.ccda_preprocessor import sanitize_ccda
 from src.import_.charm.composition_builder import build_compositions
 from src.import_.charm.extractor import CharmCcdaExtractor
 from src.import_.charm.linker import link_resources_to_encounters
@@ -116,6 +117,10 @@ async def _process_ccda(
         Tuple of (FHIR R4 Bundle, warnings)
     """
     warnings: list[str] = []
+
+    # Pre-process C-CDA to fix values that cause MS Converter failures
+    content, sanitize_warnings = sanitize_ccda(content)
+    warnings.extend(sanitize_warnings)
 
     # Validate the C-CDA
     validation_result = validate_ccda(content)
