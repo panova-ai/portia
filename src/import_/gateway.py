@@ -77,7 +77,7 @@ async def process_import(
     # Route to appropriate handler based on format
     if request.format == ImportFormat.CCDA:
         r4_bundle, format_warnings = await _process_ccda(
-            content, ms_converter, is_charm=is_charm
+            content, ms_converter, is_charm=is_charm, organization_id=organization_id
         )
         warnings.extend(format_warnings)
     elif request.format == ImportFormat.HL7V2:
@@ -135,6 +135,7 @@ async def _process_ccda(
     content: str,
     ms_converter: MSConverterService,
     is_charm: bool = False,
+    organization_id: UUID | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """
     Process a C-CDA document.
@@ -143,6 +144,7 @@ async def _process_ccda(
         content: The C-CDA XML content
         ms_converter: MS Converter service
         is_charm: Whether this is from CHARM EHR (enables special processing)
+        organization_id: Target organization for the import
 
     Returns:
         Tuple of (FHIR R4 Bundle, warnings)
@@ -172,7 +174,9 @@ async def _process_ccda(
 
     # Apply CHARM-specific post-processing if applicable
     if is_charm or _detect_charm_source(content):
-        r4_bundle, charm_warnings = _apply_charm_processing(content, r4_bundle)
+        r4_bundle, charm_warnings = _apply_charm_processing(
+            content, r4_bundle, organization_id
+        )
         warnings.extend(charm_warnings)
 
     return r4_bundle, warnings
@@ -198,6 +202,7 @@ def _detect_charm_source(content: str) -> bool:
 def _apply_charm_processing(
     original_ccda: str,
     r4_bundle: dict[str, Any],
+    organization_id: UUID | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """
     Apply CHARM-specific processing to create Encounters and link resources.
@@ -205,6 +210,7 @@ def _apply_charm_processing(
     Args:
         original_ccda: The original C-CDA XML content
         r4_bundle: The FHIR R4 bundle from MS Converter
+        organization_id: Target organization for the import
 
     Returns:
         Tuple of (modified R4 bundle, warnings)
@@ -229,7 +235,7 @@ def _apply_charm_processing(
 
         # Create Encounters and link Conditions/Medications
         r4_bundle, link_warnings = link_resources_to_encounters(
-            r4_bundle, extraction_result
+            r4_bundle, extraction_result, organization_id
         )
         warnings.extend(link_warnings)
 

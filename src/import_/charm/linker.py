@@ -7,7 +7,7 @@ resources to their appropriate Encounters based on date matching.
 
 from datetime import date
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from src.import_.charm.extractor import CharmExtractionResult, EncounterData
 
@@ -15,6 +15,7 @@ from src.import_.charm.extractor import CharmExtractionResult, EncounterData
 def link_resources_to_encounters(
     fhir_bundle: dict[str, Any],
     extraction_result: CharmExtractionResult,
+    organization_id: UUID | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """
     Create Encounter resources and link existing resources to them.
@@ -22,6 +23,7 @@ def link_resources_to_encounters(
     Args:
         fhir_bundle: The FHIR R4 bundle from MS Converter
         extraction_result: Extracted data from CHARM C-CDA
+        organization_id: Target organization for the import (for serviceProvider)
 
     Returns:
         Tuple of (modified bundle, warnings)
@@ -37,8 +39,12 @@ def link_resources_to_encounters(
     # Get practitioner reference
     practitioner_ref = _find_practitioner_reference(fhir_bundle)
 
-    # Get organization reference
-    organization_ref = _find_organization_reference(fhir_bundle)
+    # Use target organization if provided, otherwise fall back to bundle organization
+    organization_ref: str | None
+    if organization_id:
+        organization_ref = f"Organization/{organization_id}"
+    else:
+        organization_ref = _find_organization_reference(fhir_bundle)
 
     # Build a mapping from C-CDA IDs to FHIR resource references
     ccda_to_fhir = _build_ccda_to_fhir_map(fhir_bundle)
