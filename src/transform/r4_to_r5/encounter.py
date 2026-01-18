@@ -7,7 +7,6 @@ Key changes in R5:
 - 'hospitalization' renamed to 'admission'
 - 'reasonCode' and 'reasonReference' merged into 'reason'
 - 'diagnosis.use' renamed to 'diagnosis.condition'
-- 'subject' changed from single Reference to array (0..*)
 - New 'plannedStartDate' and 'plannedEndDate' fields
 """
 
@@ -35,13 +34,6 @@ def transform_encounter(r4_encounter: dict[str, Any]) -> dict[str, Any]:
             r5_encounter["class"] = {
                 "coding": [r4_class],
             }
-
-    # Transform 'subject' from single Reference to array (R5 change)
-    if "subject" in r5_encounter:
-        subject = r5_encounter["subject"]
-        if isinstance(subject, dict):
-            # Wrap single reference in array
-            r5_encounter["subject"] = [subject]
 
     # Transform 'period' to 'actualPeriod' if not already present
     if "period" in r5_encounter and "actualPeriod" not in r5_encounter:
