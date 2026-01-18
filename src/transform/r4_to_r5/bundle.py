@@ -172,15 +172,20 @@ def _clean_orphaned_encounter_refs(bundle: dict[str, Any]) -> list[str]:
     This converts Encounter/{id} references to the fullUrl format and removes
     references to Encounters not in the bundle.
     """
+    import logging
+
+    logger = logging.getLogger(__name__)
     warnings: list[str] = []
 
     # Build mappings of Encounter IDs to fullUrls
     enc_id_to_fullurl: dict[str, str] = {}
     valid_encounter_refs: set[str] = set()
+    encounter_count = 0
 
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
         if resource.get("resourceType") == "Encounter":
+            encounter_count += 1
             enc_id = resource.get("id")
             full_url = entry.get("fullUrl")
 
@@ -193,11 +198,21 @@ def _clean_orphaned_encounter_refs(bundle: dict[str, Any]) -> list[str]:
             elif enc_id:
                 # No fullUrl, just mark the Encounter/{id} as valid
                 valid_encounter_refs.add(f"Encounter/{enc_id}")
+                logger.warning("Encounter %s has no fullUrl!", enc_id)
+
+    logger.info(
+        "Found %d Encounters with %d valid refs, %d ID mappings",
+        encounter_count,
+        len(valid_encounter_refs),
+        len(enc_id_to_fullurl),
+    )
 
     orphaned_count = 0
     converted_count = 0
 
-    def process_reference(ref_value: dict[str, Any]) -> bool:
+    def process_reference(
+        ref_value: dict[str, Any], resource_type: str, field: str
+    ) -> bool:
         """Process a single reference, converting or removing as needed.
         Returns True if the reference should be deleted."""
         nonlocal converted_count, orphaned_count
@@ -207,12 +222,25 @@ def _clean_orphaned_encounter_refs(bundle: dict[str, Any]) -> list[str]:
 
         # Check if reference is in Encounter/{id} format that needs conversion
         if ref_str.startswith("Encounter/") and ref_str in enc_id_to_fullurl:
+            logger.debug(
+                "Converting %s.%s: %s -> %s",
+                resource_type,
+                field,
+                ref_str,
+                enc_id_to_fullurl[ref_str],
+            )
             ref_value["reference"] = enc_id_to_fullurl[ref_str]
             converted_count += 1
             return False
         elif ref_str.startswith(("Encounter/", "urn:uuid:")):
             # Check if it's a valid reference
             if ref_str not in valid_encounter_refs:
+                logger.warning(
+                    "Removing orphaned %s.%s: %s (not in valid refs)",
+                    resource_type,
+                    field,
+                    ref_str,
+                )
                 orphaned_count += 1
                 return True
         return False
@@ -229,7 +257,7 @@ def _clean_orphaned_encounter_refs(bundle: dict[str, Any]) -> list[str]:
             if field in resource:
                 ref_value = resource[field]
                 if isinstance(ref_value, dict):
-                    if process_reference(ref_value):
+                    if process_reference(ref_value, resource_type, field):
                         del resource[field]
 
         # Check nested context.encounter (e.g., DocumentReference)
@@ -242,13 +270,15 @@ def _clean_orphaned_encounter_refs(bundle: dict[str, Any]) -> list[str]:
                     # Process each reference in the list
                     to_remove = []
                     for i, ref_value in enumerate(enc_refs):
-                        if isinstance(ref_value, dict) and process_reference(ref_value):
+                        if isinstance(ref_value, dict) and process_reference(
+                            ref_value, resource_type, "context.encounter"
+                        ):
                             to_remove.append(i)
                     # Remove orphaned refs in reverse order
                     for i in reversed(to_remove):
                         enc_refs.pop(i)
                 elif isinstance(enc_refs, dict):
-                    if process_reference(enc_refs):
+                    if process_reference(enc_refs, resource_type, "context.encounter"):
                         del context["encounter"]
 
     if converted_count:
