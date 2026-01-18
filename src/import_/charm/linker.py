@@ -264,6 +264,9 @@ def _create_encounter(
             "start": f"{date_str}T00:00:00Z",
             "end": f"{date_str}T23:59:59Z",
         },
+        # Add planned dates for UI compatibility (UI may display these instead of actualPeriod)
+        "plannedStartDate": f"{date_str}T00:00:00Z",
+        "plannedEndDate": f"{date_str}T23:59:59Z",
     }
 
     # Add service provider if we have an organization
