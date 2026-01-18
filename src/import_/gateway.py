@@ -36,9 +36,21 @@ from src.schemas.import_schemas import (
     ImportStatus,
     PersistenceInfo,
 )
-from src.services.fhir_store_service import FHIRStoreService
+from src.services.fhir_store_service import FHIRStoreService, PersistenceResult
 from src.services.ms_converter_service import CcdaTemplate, MSConverterService
 from src.transform.r4_to_r5 import transform_bundle
+
+# Consent category for import-generated consents
+IMPORT_CONSENT_CATEGORY = {
+    "coding": [
+        {
+            "system": "https://panova.ai/consent-category",
+            "code": "import-provisional",
+            "display": "Provisional consent from data import",
+        }
+    ],
+    "text": "Provisional consent generated during data import. Explicit patient consent should be obtained.",
+}
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +124,7 @@ async def process_import(
         _set_patient_organization(r5_bundle, organization_id)
 
     # Patient matching for idempotent imports
+    match_result: MatchResult | None = None
     if fhir_store and organization_id:
         match_result, match_warnings = await _match_patient(
             r5_bundle, fhir_store, organization_id
@@ -141,6 +154,20 @@ async def process_import(
             warnings.append(
                 f"Persisted {result.resources_created} resources to FHIR store"
             )
+
+        # Create provisional Consent for the imported patient
+        if (
+            result.success
+            and match_result
+            and match_result.patient_id
+            and organization_id
+        ):
+            consent_result, consent_warnings = await _create_provisional_consent(
+                fhir_store,
+                match_result.patient_id,
+                organization_id,
+            )
+            warnings.extend(consent_warnings)
 
     # Determine final status
     status = ImportStatus.COMPLETED
@@ -420,8 +447,7 @@ async def _match_patient(
             )
         elif result.status == MatchStatus.NEW_PERSON_NEW_PATIENT:
             warnings.append(
-                f"Created new Person {result.person_id} and "
-                f"Patient {result.patient_id}"
+                f"Created new Person {result.person_id} and Patient {result.patient_id}"
             )
         elif result.status == MatchStatus.MULTIPLE_MATCHES:
             warnings.append("Multiple Person matches found - skipping patient matching")
@@ -572,3 +598,67 @@ def _replace_references(obj: Any, old_ref: str, new_ref: str) -> None:
     elif isinstance(obj, list):
         for item in obj:
             _replace_references(item, old_ref, new_ref)
+
+
+async def _create_provisional_consent(
+    fhir_store: FHIRStoreService,
+    patient_id: UUID,
+    organization_id: UUID,
+) -> tuple[PersistenceResult | None, list[str]]:
+    """
+    Create a provisional Consent resource for an imported patient.
+
+    This consent allows the organization to view the patient's data but is
+    marked as provisional/import-generated. The patient should be asked for
+    explicit consent after import.
+
+    Args:
+        fhir_store: FHIR store service
+        patient_id: The Patient resource ID
+        organization_id: The Organization to grant access to
+
+    Returns:
+        Tuple of (PersistenceResult or None, warnings)
+    """
+    from datetime import datetime, timezone
+
+    warnings: list[str] = []
+
+    # Build the provisional Consent resource
+    now = datetime.now(timezone.utc)
+    consent: dict[str, Any] = {
+        "resourceType": "Consent",
+        "status": "active",
+        "category": [IMPORT_CONSENT_CATEGORY],
+        "subject": {"reference": f"Patient/{patient_id}"},
+        "date": now.strftime("%Y-%m-%d"),
+        "grantor": [{"reference": f"Patient/{patient_id}"}],
+        "grantee": [{"reference": f"Organization/{organization_id}"}],
+        "decision": "permit",
+        "period": {"start": now.isoformat()},
+        "policyBasis": {
+            "reference": {"display": "Provisional consent implied by data import"}
+        },
+    }
+
+    # Create a bundle with just the Consent
+    consent_bundle: dict[str, Any] = {
+        "resourceType": "Bundle",
+        "type": "collection",
+        "entry": [{"resource": consent}],
+    }
+
+    try:
+        result = await fhir_store.persist_bundle(consent_bundle, organization_id)
+        if result.success:
+            warnings.append(
+                f"Created provisional Consent for Patient/{patient_id} "
+                f"(requires explicit patient consent)"
+            )
+        else:
+            warnings.append(f"Failed to create provisional Consent: {result.errors}")
+        return result, warnings
+    except Exception as e:
+        logger.warning("Failed to create provisional Consent: %s", e)
+        warnings.append(f"Could not create provisional Consent: {e}")
+        return None, warnings
