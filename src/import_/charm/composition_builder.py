@@ -257,8 +257,6 @@ def _create_section(note: ClinicalNote) -> dict[str, Any] | None:
 
     # Strip HTML tags and clean up the content
     clean_content = _strip_html(note.content)
-    # Escape any remaining special characters
-    safe_content = _escape_html(clean_content)
 
     section: dict[str, Any] = {
         "title": soap_section,  # Use SOAP section name, not original note type
@@ -273,7 +271,10 @@ def _create_section(note: ClinicalNote) -> dict[str, Any] | None:
         },
         "text": {
             "status": "generated",
-            "div": f'<div xmlns="http://www.w3.org/1999/xhtml"><p>{safe_content}</p></div>',
+            # Note: FHIR spec requires XHTML div wrapper, but omnia frontend
+            # renders text.div as plain text (no dangerouslySetInnerHTML).
+            # Using plain text for UI compatibility.
+            "div": clean_content,
         },
     }
 
