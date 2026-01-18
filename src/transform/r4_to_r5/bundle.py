@@ -194,11 +194,29 @@ def _clean_orphaned_encounter_refs(bundle: dict[str, Any]) -> list[str]:
                 # No fullUrl, just mark the Encounter/{id} as valid
                 valid_encounter_refs.add(f"Encounter/{enc_id}")
 
-    # Fields that may contain encounter references
-    encounter_ref_fields = ["encounter", "context"]
-
     orphaned_count = 0
     converted_count = 0
+
+    def process_reference(ref_value: dict[str, Any]) -> bool:
+        """Process a single reference, converting or removing as needed.
+        Returns True if the reference should be deleted."""
+        nonlocal converted_count, orphaned_count
+        ref_str = ref_value.get("reference", "")
+        if not ref_str:
+            return False
+
+        # Check if reference is in Encounter/{id} format that needs conversion
+        if ref_str.startswith("Encounter/") and ref_str in enc_id_to_fullurl:
+            ref_value["reference"] = enc_id_to_fullurl[ref_str]
+            converted_count += 1
+            return False
+        elif ref_str.startswith(("Encounter/", "urn:uuid:")):
+            # Check if it's a valid reference
+            if ref_str not in valid_encounter_refs:
+                orphaned_count += 1
+                return True
+        return False
+
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
         resource_type = resource.get("resourceType")
@@ -206,26 +224,32 @@ def _clean_orphaned_encounter_refs(bundle: dict[str, Any]) -> list[str]:
         if resource_type == "Encounter":
             continue
 
-        for field in encounter_ref_fields:
+        # Check top-level encounter and context fields
+        for field in ["encounter", "context"]:
             if field in resource:
                 ref_value = resource[field]
                 if isinstance(ref_value, dict):
-                    ref_str = ref_value.get("reference", "")
-                    if not ref_str:
-                        continue
+                    if process_reference(ref_value):
+                        del resource[field]
 
-                    # Check if reference is in Encounter/{id} format that needs conversion
-                    if (
-                        ref_str.startswith("Encounter/")
-                        and ref_str in enc_id_to_fullurl
-                    ):
-                        ref_value["reference"] = enc_id_to_fullurl[ref_str]
-                        converted_count += 1
-                    elif ref_str.startswith(("Encounter/", "urn:uuid:")):
-                        # Check if it's a valid reference
-                        if ref_str not in valid_encounter_refs:
-                            del resource[field]
-                            orphaned_count += 1
+        # Check nested context.encounter (e.g., DocumentReference)
+        if "context" in resource and isinstance(resource["context"], dict):
+            context = resource["context"]
+            if "encounter" in context:
+                enc_refs = context["encounter"]
+                # Can be a single reference or array of references
+                if isinstance(enc_refs, list):
+                    # Process each reference in the list
+                    to_remove = []
+                    for i, ref_value in enumerate(enc_refs):
+                        if isinstance(ref_value, dict) and process_reference(ref_value):
+                            to_remove.append(i)
+                    # Remove orphaned refs in reverse order
+                    for i in reversed(to_remove):
+                        enc_refs.pop(i)
+                elif isinstance(enc_refs, dict):
+                    if process_reference(enc_refs):
+                        del context["encounter"]
 
     if converted_count:
         warnings.append(
