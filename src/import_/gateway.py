@@ -513,32 +513,40 @@ def _update_patient_references(
     """
     new_patient_ref = f"Patient/{patient_id}"
 
-    # Find and remove the Patient entry, noting its old reference
-    old_patient_ref = None
+    # Find and remove the Patient entry, noting all possible old references
+    old_refs_to_replace: list[str] = []
     new_entries = []
 
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
         if resource.get("resourceType") == "Patient":
-            # Capture the old reference before removing
+            # Capture ALL possible reference formats before removing
             full_url = entry.get("fullUrl", "")
             old_id = resource.get("id", "")
+
+            # Both formats may be used in the bundle
             if full_url:
-                old_patient_ref = full_url
-            elif old_id:
-                old_patient_ref = f"Patient/{old_id}"
+                old_refs_to_replace.append(full_url)
+            if old_id:
+                old_refs_to_replace.append(f"Patient/{old_id}")
+                # Also handle urn:uuid format if it differs from fullUrl
+                urn_ref = f"urn:uuid:{old_id}"
+                if urn_ref != full_url:
+                    old_refs_to_replace.append(urn_ref)
+
             # Don't include this Patient in the new entries
             continue
         new_entries.append(entry)
 
     bundle["entry"] = new_entries
 
-    if not old_patient_ref:
+    if not old_refs_to_replace:
         logger.warning("Could not find old Patient reference to update")
         return bundle
 
-    # Update all references to the old Patient to point to the new one
-    _replace_references(bundle, old_patient_ref, new_patient_ref)
+    # Update all references to the old Patient (all formats) to point to the new one
+    for old_ref in old_refs_to_replace:
+        _replace_references(bundle, old_ref, new_patient_ref)
 
     return bundle
 
