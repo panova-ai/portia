@@ -186,22 +186,33 @@ class FHIRStoreService:
             if organization_id:
                 resource = self._add_organization_tag(resource, organization_id)
 
+            # For resources with urn:uuid fullUrl, use POST to let server assign IDs
+            # This is more compatible with GCP Healthcare API's reference resolution
+            full_url = entry.get("fullUrl", "")
+            use_post = full_url.startswith("urn:uuid:")
+
             # Create transaction entry
             transaction_entry: dict[str, Any] = {
                 "resource": resource,
                 "request": {
-                    "method": "PUT" if resource_id else "POST",
+                    "method": (
+                        "POST" if use_post else ("PUT" if resource_id else "POST")
+                    ),
                     "url": (
-                        f"{resource_type}/{resource_id}"
-                        if resource_id
-                        else resource_type
+                        resource_type
+                        if use_post
+                        else (
+                            f"{resource_type}/{resource_id}"
+                            if resource_id
+                            else resource_type
+                        )
                     ),
                 },
             }
 
-            # Preserve fullUrl for ID mapping
-            if entry.get("fullUrl"):
-                transaction_entry["fullUrl"] = entry["fullUrl"]
+            # Preserve fullUrl for ID mapping (required for local reference resolution)
+            if full_url:
+                transaction_entry["fullUrl"] = full_url
 
             transaction_entries.append(transaction_entry)
 

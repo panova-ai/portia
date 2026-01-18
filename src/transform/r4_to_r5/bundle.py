@@ -195,6 +195,13 @@ def _clean_orphaned_encounter_refs(bundle: dict[str, Any]) -> list[str]:
                     enc_id_to_fullurl[enc_id] = full_url
                     # Also map the Encounter/{id} format
                     enc_id_to_fullurl[f"Encounter/{enc_id}"] = full_url
+                # Track fullUrl format
+                if full_url.startswith("urn:uuid:"):
+                    pass  # Expected format
+                else:
+                    warnings.append(
+                        f"Encounter {enc_id} has non-urn fullUrl: {full_url[:50]}"
+                    )
             elif enc_id:
                 # No fullUrl, just mark the Encounter/{id} as valid
                 valid_encounter_refs.add(f"Encounter/{enc_id}")
