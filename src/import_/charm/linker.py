@@ -16,6 +16,7 @@ def link_resources_to_encounters(
     fhir_bundle: dict[str, Any],
     extraction_result: CharmExtractionResult,
     organization_id: UUID | None = None,
+    practitioner_role_id: UUID | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """
     Create Encounter resources and link existing resources to them.
@@ -24,6 +25,7 @@ def link_resources_to_encounters(
         fhir_bundle: The FHIR R4 bundle from MS Converter
         extraction_result: Extracted data from CHARM C-CDA
         organization_id: Target organization for the import (for serviceProvider)
+        practitioner_role_id: Target PractitionerRole for encounter participant
 
     Returns:
         Tuple of (modified bundle, warnings)
@@ -36,8 +38,18 @@ def link_resources_to_encounters(
         warnings.append("Could not find Patient reference in bundle")
         return fhir_bundle, warnings
 
-    # Get practitioner reference
-    practitioner_ref = _find_practitioner_reference(fhir_bundle)
+    # Use target PractitionerRole if provided, otherwise fall back to Practitioner from C-CDA
+    # Note: The backend requires PractitionerRole reference for encounter participant access control
+    participant_ref: str | None
+    if practitioner_role_id:
+        participant_ref = f"PractitionerRole/{practitioner_role_id}"
+    else:
+        participant_ref = _find_practitioner_reference(fhir_bundle)
+        if participant_ref:
+            warnings.append(
+                "Using Practitioner from C-CDA as encounter participant. "
+                "For proper access control, provide practitioner_role_id."
+            )
 
     # Use target organization if provided, otherwise fall back to bundle organization
     organization_ref: str | None
@@ -57,7 +69,7 @@ def link_resources_to_encounters(
         encounter, full_url, enc_ref = _create_encounter(
             enc_data,
             patient_ref,
-            practitioner_ref,
+            participant_ref,
             organization_ref,
         )
         encounter_entries.append({"fullUrl": full_url, "resource": encounter})
@@ -204,11 +216,17 @@ def _build_ccda_to_fhir_map(bundle: dict[str, Any]) -> dict[str, str]:
 def _create_encounter(
     enc_data: EncounterData,
     patient_ref: str,
-    practitioner_ref: str | None,
+    participant_ref: str | None,
     organization_ref: str | None,
 ) -> tuple[dict[str, Any], str, str]:
     """
     Create a FHIR Encounter resource from extracted encounter data.
+
+    Args:
+        enc_data: Extracted encounter data from C-CDA
+        patient_ref: Reference to the Patient resource
+        participant_ref: Reference to PractitionerRole or Practitioner for participant
+        organization_ref: Reference to Organization for serviceProvider
 
     Returns tuple of (Encounter resource, fullUrl for bundle, reference string).
     """
@@ -252,8 +270,8 @@ def _create_encounter(
     if organization_ref:
         encounter["serviceProvider"] = {"reference": organization_ref}
 
-    # Add participant if we have a practitioner
-    if practitioner_ref:
+    # Add participant if we have a participant reference
+    if participant_ref:
         encounter["participant"] = [
             {
                 "type": [
@@ -267,7 +285,7 @@ def _create_encounter(
                         ]
                     }
                 ],
-                "actor": {"reference": practitioner_ref},
+                "actor": {"reference": participant_ref},
             }
         ]
 

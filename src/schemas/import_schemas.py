@@ -61,6 +61,10 @@ class ImportRequest(BaseModel):
         default=None,
         description="Target practitioner ID. Defaults to current user.",
     )
+    practitioner_role_id: UUID | None = Field(
+        default=None,
+        description="PractitionerRole ID for encounter participant. If not provided, will be looked up from practitioner_id and organization_id.",
+    )
 
     # Patient matching options
     matching: MatchingOptions | None = Field(

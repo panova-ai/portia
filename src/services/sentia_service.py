@@ -30,12 +30,21 @@ class OrganizationContext(BaseModel):
     name: str | None = None
 
 
+class PractitionerRoleContext(BaseModel):
+    """PractitionerRole information from Sentia."""
+
+    id: UUID
+    practitioner_id: UUID
+    organization_id: UUID
+
+
 class PractitionerOrgContext(BaseModel):
     """Combined practitioner and organization context."""
 
     practitioner: PractitionerContext
     organizations: list[OrganizationContext]
     default_organization: OrganizationContext | None = None
+    practitioner_role: PractitionerRoleContext | None = None
 
 
 class SentiaService:
@@ -144,7 +153,7 @@ class SentiaService:
             organization_id: Organization to validate access to
 
         Returns:
-            PractitionerOrgContext with validated organization
+            PractitionerOrgContext with validated organization and PractitionerRole
 
         Raises:
             ValueError: If practitioner doesn't have access to organization
@@ -165,4 +174,65 @@ class SentiaService:
                 context.default_organization = org
                 break
 
+        # Get the PractitionerRole for this practitioner in this organization
+        practitioner_role = await self.get_practitioner_role(
+            auth_token, organization_id
+        )
+        context.practitioner_role = practitioner_role
+
         return context
+
+    async def get_practitioner_role(
+        self,
+        auth_token: str,
+        organization_id: UUID,
+    ) -> PractitionerRoleContext | None:
+        """
+        Get the PractitionerRole for the current practitioner in an organization.
+
+        Args:
+            auth_token: Firebase ID token
+            organization_id: Organization to get role for
+
+        Returns:
+            PractitionerRoleContext if found, None otherwise
+        """
+        client = await self._get_client()
+        headers = {"Authorization": f"Bearer {auth_token}"}
+
+        try:
+            # Call the /organizations/{org_id}/practitioner-roles/mine endpoint
+            roles_resp = await client.get(
+                f"/organizations/{organization_id}/practitioner-roles/mine",
+                headers=headers,
+                params={"count": 1},  # We only need the first role
+            )
+            roles_resp.raise_for_status()
+            roles_data = roles_resp.json()
+
+            entries = roles_data.get("entries", [])
+            if not entries:
+                return None
+
+            # Get the first role
+            role = entries[0]
+
+            # Extract practitioner ID from the reference (format: "Practitioner/{id}")
+            practitioner_id: UUID | None = None
+            practitioner_ref = role.get("practitioner", {})
+            if isinstance(practitioner_ref, dict):
+                ref_str = practitioner_ref.get("reference", "")
+                if ref_str.startswith("Practitioner/"):
+                    practitioner_id = UUID(ref_str.replace("Practitioner/", ""))
+
+            if not practitioner_id:
+                return None
+
+            return PractitionerRoleContext(
+                id=role["id"],
+                practitioner_id=practitioner_id,
+                organization_id=organization_id,
+            )
+        except Exception:
+            # If we can't get the role, return None and let the import continue
+            return None

@@ -51,6 +51,7 @@ async def process_import(
     ms_converter: MSConverterService,
     fhir_store: FHIRStoreService | None = None,
     organization_id: UUID | None = None,
+    practitioner_role_id: UUID | None = None,
 ) -> ImportResponse:
     """
     Process an import request through the full pipeline.
@@ -60,6 +61,7 @@ async def process_import(
         ms_converter: MS FHIR Converter service client
         fhir_store: Optional FHIR store service for persistence
         organization_id: Optional organization ID for tagging resources
+        practitioner_role_id: Optional PractitionerRole ID for encounter participant
 
     Returns:
         ImportResponse with the converted FHIR R5 bundle
@@ -87,7 +89,11 @@ async def process_import(
     # Route to appropriate handler based on format
     if request.format == ImportFormat.CCDA:
         r4_bundle, format_warnings = await _process_ccda(
-            content, ms_converter, is_charm=is_charm, organization_id=organization_id
+            content,
+            ms_converter,
+            is_charm=is_charm,
+            organization_id=organization_id,
+            practitioner_role_id=practitioner_role_id,
         )
         warnings.extend(format_warnings)
     elif request.format == ImportFormat.HL7V2:
@@ -159,6 +165,7 @@ async def _process_ccda(
     ms_converter: MSConverterService,
     is_charm: bool = False,
     organization_id: UUID | None = None,
+    practitioner_role_id: UUID | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """
     Process a C-CDA document.
@@ -168,6 +175,7 @@ async def _process_ccda(
         ms_converter: MS Converter service
         is_charm: Whether this is from CHARM EHR (enables special processing)
         organization_id: Target organization for the import
+        practitioner_role_id: Target PractitionerRole for encounter participant
 
     Returns:
         Tuple of (FHIR R4 Bundle, warnings)
@@ -198,7 +206,7 @@ async def _process_ccda(
     # Apply CHARM-specific post-processing if applicable
     if is_charm or _detect_charm_source(content):
         r4_bundle, charm_warnings = _apply_charm_processing(
-            content, r4_bundle, organization_id
+            content, r4_bundle, organization_id, practitioner_role_id
         )
         warnings.extend(charm_warnings)
 
@@ -226,6 +234,7 @@ def _apply_charm_processing(
     original_ccda: str,
     r4_bundle: dict[str, Any],
     organization_id: UUID | None = None,
+    practitioner_role_id: UUID | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """
     Apply CHARM-specific processing to create Encounters and link resources.
@@ -234,6 +243,7 @@ def _apply_charm_processing(
         original_ccda: The original C-CDA XML content
         r4_bundle: The FHIR R4 bundle from MS Converter
         organization_id: Target organization for the import
+        practitioner_role_id: Target PractitionerRole for encounter participant
 
     Returns:
         Tuple of (modified R4 bundle, warnings)
@@ -258,7 +268,7 @@ def _apply_charm_processing(
 
         # Create Encounters and link Conditions/Medications
         r4_bundle, link_warnings = link_resources_to_encounters(
-            r4_bundle, extraction_result, organization_id
+            r4_bundle, extraction_result, organization_id, practitioner_role_id
         )
         warnings.extend(link_warnings)
 

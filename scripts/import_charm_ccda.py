@@ -163,6 +163,63 @@ def get_fhir_access_token() -> str:
     return credentials.token  # type: ignore[return-value]
 
 
+def lookup_practitioner_role(
+    fhir_store: str,
+    practitioner_id: str,
+    organization_id: str | None = None,
+) -> dict[str, str | None]:
+    """
+    Look up PractitionerRole for a practitioner via FHIR.
+
+    Args:
+        fhir_store: Full FHIR store path
+        practitioner_id: Practitioner resource ID (UUID)
+        organization_id: Optional organization to filter by
+
+    Returns:
+        Dict with practitioner_role_id and organization_id
+    """
+    access_token = get_fhir_access_token()
+    fhir_url = f"https://healthcare.googleapis.com/v1/{fhir_store}/fhir"
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/fhir+json",
+    }
+
+    params: dict[str, str] = {"practitioner": f"Practitioner/{practitioner_id}"}
+    if organization_id:
+        params["organization"] = f"Organization/{organization_id}"
+
+    # Search for PractitionerRole where practitioner matches
+    response = httpx.get(
+        f"{fhir_url}/PractitionerRole",
+        headers=headers,
+        params=params,
+        timeout=30.0,
+    )
+
+    if response.status_code != 200:
+        return {"practitioner_role_id": None, "organization_id": None}
+
+    bundle = response.json()
+    entries = bundle.get("entry", [])
+
+    if not entries:
+        return {"practitioner_role_id": None, "organization_id": None}
+
+    # Get first PractitionerRole
+    role = entries[0].get("resource", {})
+    role_id = role.get("id")
+    org_ref = role.get("organization", {}).get("reference", "")
+
+    org_id = None
+    if org_ref.startswith("Organization/"):
+        org_id = org_ref.replace("Organization/", "")
+
+    return {"practitioner_role_id": role_id, "organization_id": org_id}
+
+
 def lookup_organization_for_practitioner(
     fhir_store: str,
     practitioner_id: str,
@@ -177,39 +234,8 @@ def lookup_organization_for_practitioner(
     Returns:
         Organization ID or None if not found
     """
-    access_token = get_fhir_access_token()
-    fhir_url = f"https://healthcare.googleapis.com/v1/{fhir_store}/fhir"
-
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Accept": "application/fhir+json",
-    }
-
-    # Search for PractitionerRole where practitioner matches
-    response = httpx.get(
-        f"{fhir_url}/PractitionerRole",
-        headers=headers,
-        params={"practitioner": f"Practitioner/{practitioner_id}"},
-        timeout=30.0,
-    )
-
-    if response.status_code != 200:
-        return None
-
-    bundle = response.json()
-    entries = bundle.get("entry", [])
-
-    if not entries:
-        return None
-
-    # Get organization reference from first PractitionerRole
-    role = entries[0].get("resource", {})
-    org_ref = role.get("organization", {}).get("reference", "")
-
-    if org_ref.startswith("Organization/"):
-        return org_ref.replace("Organization/", "")
-
-    return None
+    result = lookup_practitioner_role(fhir_store, practitioner_id)
+    return result.get("organization_id")
 
 
 def import_ccda(
@@ -218,6 +244,7 @@ def import_ccda(
     file_content: bytes,
     organization_id: str,
     practitioner_id: str | None = None,
+    practitioner_role_id: str | None = None,
     source_system: str | None = None,
 ) -> dict[str, Any]:
     """Import C-CDA content to Portia."""
@@ -232,6 +259,9 @@ def import_ccda(
 
     if practitioner_id:
         payload["practitioner_id"] = practitioner_id
+
+    if practitioner_role_id:
+        payload["practitioner_role_id"] = practitioner_role_id
 
     if source_system:
         payload["metadata"] = {"source_system": source_system}
@@ -400,20 +430,28 @@ Examples:
                 )
                 sys.exit(1)
 
-    # If we have practitioner_id but no org_id, look up org from FHIR
-    if practitioner_id and not organization_id:
-        print(f"Looking up organization for practitioner {practitioner_id}...")
+    # Look up PractitionerRole from FHIR
+    practitioner_role_id = None
+    if practitioner_id:
+        print(f"Looking up PractitionerRole for practitioner {practitioner_id}...")
         try:
-            organization_id = lookup_organization_for_practitioner(
+            role_info = lookup_practitioner_role(
                 env_config["fhir_store"],
                 practitioner_id,
+                organization_id,
             )
-            if organization_id:
-                print(f"  Found organization: {organization_id}")
+            practitioner_role_id = role_info.get("practitioner_role_id")
+            if practitioner_role_id:
+                print(f"  Found PractitionerRole: {practitioner_role_id}")
             else:
-                print("  No organization found for practitioner", file=sys.stderr)
+                print("  No PractitionerRole found", file=sys.stderr)
+
+            # Also get organization if not already set
+            if not organization_id and role_info.get("organization_id"):
+                organization_id = role_info.get("organization_id")
+                print(f"  Found organization: {organization_id}")
         except Exception as e:
-            print(f"Error looking up organization: {e}", file=sys.stderr)
+            print(f"Error looking up PractitionerRole: {e}", file=sys.stderr)
 
     if not organization_id:
         print("Error: Could not determine organization ID", file=sys.stderr)
@@ -424,6 +462,7 @@ Examples:
         print("\n[DRY RUN] Would import with:")
         print(f"  Organization ID: {organization_id}")
         print(f"  Practitioner ID: {practitioner_id or '(not set)'}")
+        print(f"  PractitionerRole ID: {practitioner_role_id or '(not set)'}")
         print("  Source system: charm")
         print(f"  File size: {len(file_content):,} bytes")
         sys.exit(0)
@@ -443,6 +482,7 @@ Examples:
             file_content,
             organization_id,
             practitioner_id,
+            practitioner_role_id,
             source_system="charm",
         )
 

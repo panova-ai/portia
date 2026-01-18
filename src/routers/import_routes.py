@@ -46,6 +46,7 @@ async def import_data(
     # Resolve organization context
     organization_id = request.organization_id
     practitioner_id = request.practitioner_id
+    practitioner_role_id = request.practitioner_role_id
 
     if current_user.auth_type == "firebase" and current_user.raw_token:
         # Resolve practitioner/org context from Sentia
@@ -63,19 +64,30 @@ async def import_data(
                 )
                 if context.default_organization:
                     organization_id = context.default_organization.id
+                    # Get PractitionerRole for the default organization
+                    context.practitioner_role = (
+                        await sentia_service.get_practitioner_role(
+                            current_user.raw_token, organization_id
+                        )
+                    )
 
             # Set practitioner_id if not provided
             if not practitioner_id:
                 practitioner_id = context.practitioner.id
 
+            # Set practitioner_role_id if not provided and available from context
+            if not practitioner_role_id and context.practitioner_role:
+                practitioner_role_id = context.practitioner_role.id
+
             logger.info(
-                "Import request from practitioner %s (org=%s)",
+                "Import request from practitioner %s (org=%s, role=%s)",
                 context.practitioner.name or context.practitioner.id,
                 (
                     context.default_organization.name
                     if context.default_organization
                     else organization_id
                 ),
+                practitioner_role_id,
             )
         except ValueError as e:
             raise HTTPException(
@@ -104,6 +116,7 @@ async def import_data(
             ms_converter,
             fhir_store=fhir_store,
             organization_id=organization_id,
+            practitioner_role_id=practitioner_role_id,
         )
         return response
 
