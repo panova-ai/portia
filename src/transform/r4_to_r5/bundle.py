@@ -124,6 +124,10 @@ def transform_bundle(
     if "timestamp" in r4_bundle:
         r5_bundle["timestamp"] = r4_bundle["timestamp"]
 
+    # Clean up orphaned encounter references
+    orphan_warnings = _clean_orphaned_encounter_refs(r5_bundle)
+    warnings.extend(orphan_warnings)
+
     return r5_bundle, counts, warnings
 
 
@@ -158,3 +162,52 @@ def _transform_request(
             new_request["url"] = url.replace(r4_type, r5_type, 1)
 
     return new_request
+
+
+def _clean_orphaned_encounter_refs(bundle: dict[str, Any]) -> list[str]:
+    """
+    Remove encounter references that point to Encounters not in the bundle.
+
+    This prevents 404 errors during persistence when resources reference
+    Encounters that were mentioned in the source but not included in the bundle.
+    """
+    warnings: list[str] = []
+
+    # Build a set of valid Encounter references
+    valid_encounter_refs: set[str] = set()
+    for entry in bundle.get("entry", []):
+        resource = entry.get("resource", {})
+        if resource.get("resourceType") == "Encounter":
+            enc_id = resource.get("id")
+            full_url = entry.get("fullUrl")
+
+            if enc_id:
+                valid_encounter_refs.add(f"Encounter/{enc_id}")
+            if full_url:
+                valid_encounter_refs.add(full_url)
+
+    # Fields that may contain encounter references
+    encounter_ref_fields = ["encounter", "context"]
+
+    orphaned_count = 0
+    for entry in bundle.get("entry", []):
+        resource = entry.get("resource", {})
+        resource_type = resource.get("resourceType")
+
+        if resource_type == "Encounter":
+            continue
+
+        for field in encounter_ref_fields:
+            if field in resource:
+                ref_value = resource[field]
+                if isinstance(ref_value, dict):
+                    ref_str = ref_value.get("reference", "")
+                    if ref_str and ref_str.startswith(("Encounter/", "urn:uuid:")):
+                        if ref_str not in valid_encounter_refs:
+                            del resource[field]
+                            orphaned_count += 1
+
+    if orphaned_count:
+        warnings.append(f"Removed {orphaned_count} orphaned encounter references")
+
+    return warnings
