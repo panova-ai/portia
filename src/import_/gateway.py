@@ -91,6 +91,10 @@ async def process_import(
     r5_bundle, counts, transform_warnings = transform_bundle(r4_bundle)
     warnings.extend(transform_warnings)
 
+    # Set organization on Patient resources
+    if organization_id:
+        _set_patient_organization(r5_bundle, organization_id)
+
     # Persist to FHIR store if service is provided
     if fhir_store:
         result = await fhir_store.persist_bundle(r5_bundle, organization_id)
@@ -293,3 +297,16 @@ def _get_ccda_template(document_type: str | None) -> CcdaTemplate:
         "TransferSummary": CcdaTemplate.TRANSFER_SUMMARY,
     }
     return template_map.get(document_type or "", CcdaTemplate.CCD)
+
+
+def _set_patient_organization(bundle: dict[str, Any], organization_id: UUID) -> None:
+    """Set managingOrganization on all Patient resources in the bundle.
+
+    This is required for patients to appear in the organization's patient list.
+    """
+    org_reference = f"Organization/{organization_id}"
+
+    for entry in bundle.get("entry", []):
+        resource = entry.get("resource", {})
+        if resource.get("resourceType") == "Patient":
+            resource["managingOrganization"] = {"reference": org_reference}
