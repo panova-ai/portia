@@ -36,6 +36,11 @@ class FHIRStoreService:
     def __init__(self, fhir_client: FHIRClient):
         self._client = fhir_client
 
+    @property
+    def client(self) -> FHIRClient:
+        """Expose the underlying FHIRClient for operations like patient matching."""
+        return self._client
+
     async def persist_bundle(
         self,
         bundle: dict[str, Any],

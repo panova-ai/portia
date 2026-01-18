@@ -6,11 +6,13 @@ This module handles the complete import flow:
 2. Call MS Converter (C-CDA/HL7v2 → FHIR R4)
 3. Apply source-specific post-processing (e.g., CHARM encounter linking)
 4. Transform R4 → R5
-5. Persist to FHIR store
-6. Return the response with persistence info
+5. Match/create Patient for idempotency
+6. Persist to FHIR store
+7. Return the response with persistence info
 """
 
 import base64
+import logging
 from datetime import date
 from typing import Any
 from uuid import UUID, uuid4
@@ -20,6 +22,12 @@ from src.import_.ccda_preprocessor import sanitize_ccda
 from src.import_.charm.composition_builder import build_compositions
 from src.import_.charm.extractor import CharmCcdaExtractor
 from src.import_.charm.linker import link_resources_to_encounters
+from src.import_.matching.patient_matcher import (
+    MatchResult,
+    MatchStatus,
+    PatientDemographics,
+    PatientMatcher,
+)
 from src.import_.validators.ccda_validator import validate_ccda
 from src.schemas.import_schemas import (
     ImportFormat,
@@ -31,6 +39,8 @@ from src.schemas.import_schemas import (
 from src.services.fhir_store_service import FHIRStoreService
 from src.services.ms_converter_service import CcdaTemplate, MSConverterService
 from src.transform.r4_to_r5 import transform_bundle
+
+logger = logging.getLogger(__name__)
 
 # Known source systems that require special processing
 CHARM_SOURCE_SYSTEMS = {"charm", "charm_ehr", "charm-ehr"}
@@ -94,6 +104,19 @@ async def process_import(
     # Set organization on Patient resources
     if organization_id:
         _set_patient_organization(r5_bundle, organization_id)
+
+    # Patient matching for idempotent imports
+    if fhir_store and organization_id:
+        match_result, match_warnings = await _match_patient(
+            r5_bundle, fhir_store, organization_id
+        )
+        warnings.extend(match_warnings)
+
+        if match_result and match_result.patient_id:
+            # Update bundle to use the matched/created Patient
+            r5_bundle = _update_patient_references(
+                r5_bundle, str(match_result.patient_id)
+            )
 
     # Persist to FHIR store if service is provided
     if fhir_store:
@@ -339,3 +362,195 @@ def _ensure_patient_fullurl(bundle: dict[str, Any]) -> None:
                 if not resource.get("id"):
                     resource["id"] = patient_id
                 entry["fullUrl"] = f"urn:uuid:{patient_id}"
+
+
+async def _match_patient(
+    bundle: dict[str, Any],
+    fhir_store: FHIRStoreService,
+    organization_id: UUID,
+) -> tuple[MatchResult | None, list[str]]:
+    """Match the Patient in the bundle to existing Person/Patient resources.
+
+    Uses Panova's Person/Patient model for idempotent imports:
+    - Searches for existing Person by demographics
+    - Finds or creates Patient in the target organization
+    - Returns the matched/created Patient ID
+
+    Args:
+        bundle: The FHIR R5 bundle with Patient resource
+        fhir_store: FHIR store service (provides FHIRClient)
+        organization_id: Target organization for the Patient
+
+    Returns:
+        Tuple of (MatchResult or None, warnings)
+    """
+    warnings: list[str] = []
+
+    # Extract demographics from the bundle's Patient resource
+    demographics = _extract_patient_demographics(bundle)
+    if not demographics:
+        warnings.append("Could not extract patient demographics for matching")
+        return None, warnings
+
+    # Use PatientMatcher to find/create the proper Person+Patient
+    matcher = PatientMatcher(fhir_store.client)
+    try:
+        result = await matcher.match_or_create(demographics, organization_id)
+
+        # Log the result
+        if result.status == MatchStatus.EXISTING_PERSON_EXISTING_PATIENT:
+            warnings.append(
+                f"Matched existing Patient {result.patient_id} "
+                f"(Person {result.person_id})"
+            )
+        elif result.status == MatchStatus.EXISTING_PERSON_NEW_PATIENT:
+            warnings.append(
+                f"Created Patient {result.patient_id} for existing "
+                f"Person {result.person_id}"
+            )
+        elif result.status == MatchStatus.NEW_PERSON_NEW_PATIENT:
+            warnings.append(
+                f"Created new Person {result.person_id} and "
+                f"Patient {result.patient_id}"
+            )
+        elif result.status == MatchStatus.MULTIPLE_MATCHES:
+            warnings.append("Multiple Person matches found - skipping patient matching")
+            return None, warnings
+        elif result.status == MatchStatus.MATCH_FAILED:
+            warnings.append("Patient matching failed")
+            return None, warnings
+
+        if result.warnings:
+            warnings.extend(result.warnings)
+
+        return result, warnings
+
+    except Exception as e:
+        logger.warning("Patient matching failed: %s", e)
+        warnings.append(f"Patient matching error (non-fatal): {e}")
+        return None, warnings
+
+
+def _extract_patient_demographics(bundle: dict[str, Any]) -> PatientDemographics | None:
+    """Extract patient demographics from the bundle's Patient resource."""
+    for entry in bundle.get("entry", []):
+        resource = entry.get("resource", {})
+        if resource.get("resourceType") == "Patient":
+            # Extract name
+            names = resource.get("name", [])
+            if not names:
+                return None
+            name = names[0]
+            given_names = name.get("given", [])
+            given_name = given_names[0] if given_names else None
+            family_name = name.get("family")
+
+            # Extract birthDate
+            birth_date_str = resource.get("birthDate")
+            if not birth_date_str or not given_name or not family_name:
+                return None
+
+            try:
+                birth_date = date.fromisoformat(birth_date_str[:10])
+            except (ValueError, TypeError):
+                return None
+
+            # Extract optional fields
+            gender = resource.get("gender")
+
+            # Extract phone/email from telecom
+            phone = None
+            email = None
+            for telecom in resource.get("telecom", []):
+                system = telecom.get("system")
+                value = telecom.get("value")
+                if system == "phone" and not phone:
+                    phone = value
+                elif system == "email" and not email:
+                    email = value
+
+            # Extract address
+            address_line = None
+            address_city = None
+            address_state = None
+            address_postal_code = None
+            addresses = resource.get("address", [])
+            if addresses:
+                addr = addresses[0]
+                lines = addr.get("line", [])
+                address_line = lines[0] if lines else None
+                address_city = addr.get("city")
+                address_state = addr.get("state")
+                address_postal_code = addr.get("postalCode")
+
+            return PatientDemographics(
+                given_name=given_name,
+                family_name=family_name,
+                birth_date=birth_date,
+                gender=gender,
+                phone=phone,
+                email=email,
+                address_line=address_line,
+                address_city=address_city,
+                address_state=address_state,
+                address_postal_code=address_postal_code,
+            )
+
+    return None
+
+
+def _update_patient_references(
+    bundle: dict[str, Any], patient_id: str
+) -> dict[str, Any]:
+    """Update the bundle to use the matched Patient and remove the old Patient entry.
+
+    Args:
+        bundle: The FHIR bundle
+        patient_id: The matched/created Patient ID to use
+
+    Returns:
+        Modified bundle with updated Patient references
+    """
+    new_patient_ref = f"Patient/{patient_id}"
+
+    # Find and remove the Patient entry, noting its old reference
+    old_patient_ref = None
+    new_entries = []
+
+    for entry in bundle.get("entry", []):
+        resource = entry.get("resource", {})
+        if resource.get("resourceType") == "Patient":
+            # Capture the old reference before removing
+            full_url = entry.get("fullUrl", "")
+            old_id = resource.get("id", "")
+            if full_url:
+                old_patient_ref = full_url
+            elif old_id:
+                old_patient_ref = f"Patient/{old_id}"
+            # Don't include this Patient in the new entries
+            continue
+        new_entries.append(entry)
+
+    bundle["entry"] = new_entries
+
+    if not old_patient_ref:
+        logger.warning("Could not find old Patient reference to update")
+        return bundle
+
+    # Update all references to the old Patient to point to the new one
+    _replace_references(bundle, old_patient_ref, new_patient_ref)
+
+    return bundle
+
+
+def _replace_references(obj: Any, old_ref: str, new_ref: str) -> None:
+    """Recursively replace reference strings in a dict/list structure."""
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            if key == "reference" and value == old_ref:
+                obj[key] = new_ref
+            else:
+                _replace_references(value, old_ref, new_ref)
+    elif isinstance(obj, list):
+        for item in obj:
+            _replace_references(item, old_ref, new_ref)
