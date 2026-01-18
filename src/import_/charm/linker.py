@@ -164,7 +164,13 @@ def _build_ccda_to_fhir_map(bundle: dict[str, Any]) -> dict[str, str]:
         fhir_ref = f"{resource_type}/{resource_id}"
 
         # Check identifiers for C-CDA ID
-        for identifier in resource.get("identifier", []):
+        # Handle both list and single-object identifier formats from MS Converter
+        identifiers = resource.get("identifier", [])
+        if isinstance(identifiers, dict):
+            identifiers = [identifiers]
+        for identifier in identifiers:
+            if not isinstance(identifier, dict):
+                continue
             value = identifier.get("value", "")
 
             # Map both the full identifier and just the value
