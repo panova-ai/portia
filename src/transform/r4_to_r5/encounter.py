@@ -25,15 +25,19 @@ def transform_encounter(r4_encounter: dict[str, Any]) -> dict[str, Any]:
     """
     r5_encounter = r4_encounter.copy()
 
-    # Transform 'class' from Coding to CodeableConcept
+    # Transform 'class' from single Coding to array of CodeableConcept (R5 change)
+    # R4: class is a single Coding (0..1)
+    # R5: class is an array of CodeableConcept (0..*)
     if "class" in r5_encounter:
         r4_class = r5_encounter["class"]
-        # R4 class is a Coding, R5 expects CodeableConcept with coding array
-        if isinstance(r4_class, dict) and "coding" not in r4_class:
-            # It's a single Coding, wrap in CodeableConcept
-            r5_encounter["class"] = {
-                "coding": [r4_class],
-            }
+        if isinstance(r4_class, dict):
+            # It's a single Coding or CodeableConcept, wrap in array
+            if "coding" not in r4_class:
+                # It's a single Coding, wrap in CodeableConcept then array
+                r5_encounter["class"] = [{"coding": [r4_class]}]
+            else:
+                # It's already a CodeableConcept, just wrap in array
+                r5_encounter["class"] = [r4_class]
 
     # Transform 'period' to 'actualPeriod' if not already present
     if "period" in r5_encounter and "actualPeriod" not in r5_encounter:
