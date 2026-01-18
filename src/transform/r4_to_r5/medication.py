@@ -66,10 +66,13 @@ def transform_medication_statement(
         r5_medication_usage["encounter"] = r4_medication_statement["context"]
 
     # Transform status (significant changes)
+    # If status is missing, default to "recorded" (R5's default active equivalent)
     if "status" in r4_medication_statement:
         r5_medication_usage["status"] = _transform_status(
             r4_medication_statement["status"]
         )
+    else:
+        r5_medication_usage["status"] = "recorded"
 
     # Transform medication[x] to medication (CodeableReference in R5)
     r5_medication_usage["medication"] = _transform_medication(r4_medication_statement)

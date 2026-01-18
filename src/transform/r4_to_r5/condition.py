@@ -26,11 +26,23 @@ def transform_condition(r4_condition: dict[str, Any]) -> dict[str, Any]:
     r5_condition = r4_condition.copy()
     r5_condition["resourceType"] = "Condition"
 
-    # Transform clinicalStatus codes if present
+    # Transform clinicalStatus codes if present, or add default
+    # clinicalStatus is required in FHIR R5
     if "clinicalStatus" in r5_condition:
         r5_condition["clinicalStatus"] = _transform_clinical_status(
             r5_condition["clinicalStatus"]
         )
+    else:
+        # Default to "active" if clinicalStatus is missing
+        r5_condition["clinicalStatus"] = {
+            "coding": [
+                {
+                    "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                    "code": "active",
+                    "display": "Active",
+                }
+            ]
+        }
 
     # Transform verificationStatus codes if present
     if "verificationStatus" in r5_condition:
