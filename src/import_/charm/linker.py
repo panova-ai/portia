@@ -101,15 +101,24 @@ def link_resources_to_encounters(
 
 
 def _find_patient_reference(bundle: dict[str, Any]) -> str | None:
-    """Find the Patient resource reference in the bundle."""
+    """Find the Patient resource reference in the bundle.
+
+    Prefers fullUrl (especially urn:uuid format) for local bundle references
+    to ensure proper resolution in transaction bundles.
+    """
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
         if resource.get("resourceType") == "Patient":
+            full_url: str | None = entry.get("fullUrl")
             patient_id = resource.get("id")
+
+            # Prefer urn:uuid fullUrl for transaction bundle compatibility
+            if full_url and full_url.startswith("urn:uuid:"):
+                return full_url
+            # Fall back to Patient/{id} for non-uuid fullUrls or missing fullUrl
             if patient_id:
                 return f"Patient/{patient_id}"
-            # Try fullUrl
-            full_url: str | None = entry.get("fullUrl")
+            # Last resort: use whatever fullUrl we have
             if full_url:
                 return full_url
     return None

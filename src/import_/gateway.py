@@ -211,6 +211,9 @@ def _apply_charm_processing(
     """
     warnings: list[str] = []
 
+    # Ensure Patient has urn:uuid fullUrl for proper transaction bundle references
+    _ensure_patient_fullurl(r4_bundle)
+
     try:
         # Extract encounter and note data from the C-CDA
         extractor = CharmCcdaExtractor(original_ccda)
@@ -310,3 +313,23 @@ def _set_patient_organization(bundle: dict[str, Any], organization_id: UUID) -> 
         resource = entry.get("resource", {})
         if resource.get("resourceType") == "Patient":
             resource["managingOrganization"] = {"reference": org_reference}
+
+
+def _ensure_patient_fullurl(bundle: dict[str, Any]) -> None:
+    """Ensure Patient resource has urn:uuid fullUrl for transaction bundle references.
+
+    MS Converter output may not have fullUrl set. For proper reference resolution
+    within transaction bundles, we need to ensure Patient has a urn:uuid fullUrl
+    that other resources (like Encounters) can reference.
+    """
+    for entry in bundle.get("entry", []):
+        resource = entry.get("resource", {})
+        if resource.get("resourceType") == "Patient":
+            full_url = entry.get("fullUrl")
+            # Add urn:uuid fullUrl if missing or not in urn:uuid format
+            if not full_url or not full_url.startswith("urn:uuid:"):
+                patient_id = resource.get("id") or str(uuid4())
+                # Ensure resource has an id
+                if not resource.get("id"):
+                    resource["id"] = patient_id
+                entry["fullUrl"] = f"urn:uuid:{patient_id}"
