@@ -13,10 +13,13 @@ def transform_medication_statement(
     r4_medication_statement: dict[str, Any],
 ) -> dict[str, Any]:
     """
-    Transform a FHIR R4 MedicationStatement to R5 MedicationUsage.
+    Transform a FHIR R4 MedicationStatement to R5 format.
+
+    Note: GCP Healthcare API's R5 mode still uses "MedicationStatement" as the
+    resource type (not "MedicationUsage" from the official R5 spec), so we keep
+    the resource type unchanged but apply R5 structural changes.
 
     Key changes in R5:
-    - resourceType: MedicationStatement -> MedicationUsage
     - status codes changed significantly
     - medication[x] becomes medication (CodeableReference)
     - basedOn renamed to relatedClinicalInformation (broader scope)
@@ -26,10 +29,11 @@ def transform_medication_statement(
         r4_medication_statement: FHIR R4 MedicationStatement resource
 
     Returns:
-        FHIR R5 MedicationUsage resource
+        FHIR R5-compatible MedicationStatement resource
     """
+    # Keep MedicationStatement as GCP Healthcare doesn't support MedicationUsage
     r5_medication_usage: dict[str, Any] = {
-        "resourceType": "MedicationUsage",
+        "resourceType": "MedicationStatement",
     }
 
     # Copy over fields that are the same

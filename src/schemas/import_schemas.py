@@ -86,7 +86,7 @@ class ResourceCounts(BaseModel):
 
     Patient: int = 0
     Condition: int = 0
-    MedicationUsage: int = 0
+    MedicationStatement: int = 0  # GCP Healthcare R5 still uses this name
     AllergyIntolerance: int = 0
     Immunization: int = 0
     Observation: int = 0
@@ -97,6 +97,7 @@ class ResourceCounts(BaseModel):
     DocumentReference: int = 0
     Practitioner: int = 0
     Organization: int = 0
+    Medication: int = 0
 
 
 class MatchingResult(BaseModel):

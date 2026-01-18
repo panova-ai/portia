@@ -75,10 +75,9 @@ def transform_bundle(
                 # Normalize array fields
                 r5_resource = _normalize_array_fields(r5_resource)
 
-                # Map MedicationStatement to MedicationUsage for counting
-                count_type = resource_type
-                if resource_type == "MedicationStatement":
-                    count_type = "MedicationUsage"
+                # Get the actual resource type from the transformed resource
+                # (handles cases where transformer changes the type)
+                count_type = r5_resource.get("resourceType", resource_type)
 
                 # Update counts
                 if hasattr(counts, count_type):

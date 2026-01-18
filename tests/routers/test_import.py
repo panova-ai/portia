@@ -105,7 +105,9 @@ class TestImportEndpoint:
         counts = data["resources_extracted"]
         assert counts["Patient"] == 1
         assert counts["Condition"] == 2
-        assert counts["MedicationUsage"] == 1  # Transformed from MedicationStatement
+        assert (
+            counts["MedicationStatement"] == 1
+        )  # GCP Healthcare R5 uses MedicationStatement
 
     @pytest.mark.anyio
     async def test_import_invalid_base64_returns_400(
