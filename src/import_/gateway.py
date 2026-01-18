@@ -250,11 +250,17 @@ def _build_encounter_date_map(bundle: dict[str, Any]) -> dict[date, str]:
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
         if resource.get("resourceType") == "Encounter":
+            # Prefer fullUrl for local bundle references (urn:uuid format)
+            # This ensures transaction bundles can resolve references correctly
+            full_url = entry.get("fullUrl")
             enc_id = resource.get("id")
-            if not enc_id:
-                continue
 
-            enc_ref = f"Encounter/{enc_id}"
+            if full_url:
+                enc_ref = full_url
+            elif enc_id:
+                enc_ref = f"Encounter/{enc_id}"
+            else:
+                continue
 
             # Get the date from actualPeriod.start
             actual_period = resource.get("actualPeriod", {})

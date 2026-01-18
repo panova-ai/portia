@@ -48,13 +48,13 @@ def link_resources_to_encounters(
     encounter_date_to_ref: dict[date, str] = {}
 
     for enc_data in extraction_result.encounters:
-        encounter, enc_ref = _create_encounter(
+        encounter, full_url, enc_ref = _create_encounter(
             enc_data,
             patient_ref,
             practitioner_ref,
             organization_ref,
         )
-        encounter_entries.append({"resource": encounter})
+        encounter_entries.append({"fullUrl": full_url, "resource": encounter})
         encounter_date_to_ref[enc_data.date] = enc_ref
 
     # Link Conditions to Encounters
@@ -191,14 +191,16 @@ def _create_encounter(
     patient_ref: str,
     practitioner_ref: str | None,
     organization_ref: str | None,
-) -> tuple[dict[str, Any], str]:
+) -> tuple[dict[str, Any], str, str]:
     """
     Create a FHIR Encounter resource from extracted encounter data.
 
-    Returns tuple of (Encounter resource, reference string).
+    Returns tuple of (Encounter resource, fullUrl for bundle, reference string).
     """
     encounter_id = str(uuid4())
-    enc_ref = f"Encounter/{encounter_id}"
+    # Use urn:uuid format for fullUrl to enable local references in transaction bundles
+    full_url = f"urn:uuid:{encounter_id}"
+    enc_ref = full_url  # Use fullUrl as reference for local bundle references
 
     # Format date as FHIR datetime
     date_str = enc_data.date.isoformat()
@@ -257,7 +259,7 @@ def _create_encounter(
     # Add diagnosis references for linked conditions
     # (These will be updated after conditions are linked)
 
-    return encounter, enc_ref
+    return encounter, full_url, enc_ref
 
 
 def _link_condition_to_encounter(

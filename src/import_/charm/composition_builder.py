@@ -93,7 +93,7 @@ def build_compositions(
             warnings.append(f"No encounter found for notes dated {note_date}")
             continue
 
-        composition = _create_composition(
+        composition, full_url = _create_composition(
             notes=notes,
             note_date=note_date,
             patient_ref=patient_ref,
@@ -102,7 +102,7 @@ def build_compositions(
             encounter_ref=encounter_ref,
         )
 
-        composition_entries.append({"resource": composition})
+        composition_entries.append({"fullUrl": full_url, "resource": composition})
 
     # Add Compositions to the bundle
     existing_entries = fhir_bundle.get("entry", [])
@@ -162,7 +162,7 @@ def _create_composition(
     practitioner_ref: str | None,
     organization_ref: str | None,
     encounter_ref: str,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], str]:
     """
     Create a FHIR Composition resource from clinical notes.
 
@@ -175,9 +175,10 @@ def _create_composition(
         encounter_ref: Reference to the Encounter resource
 
     Returns:
-        FHIR Composition resource
+        Tuple of (FHIR Composition resource, fullUrl for bundle)
     """
     composition_id = str(uuid4())
+    full_url = f"urn:uuid:{composition_id}"
     date_str = note_date.isoformat()
 
     # Build sections from notes
@@ -211,7 +212,7 @@ def _create_composition(
     if organization_ref:
         composition["custodian"] = {"reference": organization_ref}
 
-    return composition
+    return composition, full_url
 
 
 def _create_section(note: ClinicalNote) -> dict[str, Any] | None:
