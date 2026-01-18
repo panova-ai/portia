@@ -336,6 +336,12 @@ Examples:
     )
 
     parser.add_argument(
+        "--practitioner-role-id",
+        dest="practitioner_role_id",
+        help="PractitionerRole ID (optional, skips FHIR lookup)",
+    )
+
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Validate inputs without actually importing",
@@ -430,9 +436,11 @@ Examples:
                 )
                 sys.exit(1)
 
-    # Look up PractitionerRole from FHIR
-    practitioner_role_id = None
-    if practitioner_id:
+    # Look up PractitionerRole from FHIR (unless provided directly)
+    practitioner_role_id = args.practitioner_role_id
+    if practitioner_role_id:
+        print(f"Using provided PractitionerRole: {practitioner_role_id}")
+    elif practitioner_id:
         print(f"Looking up PractitionerRole for practitioner {practitioner_id}...")
         try:
             role_info = lookup_practitioner_role(
