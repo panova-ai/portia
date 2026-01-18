@@ -462,6 +462,13 @@ Examples:
                 for warning in result["warnings"]:
                     print(f"    - {warning}")
 
+        if result.get("errors"):
+            print(f"  Errors: {len(result['errors'])}")
+            for error in result["errors"][:20]:  # Show first 20 errors
+                print(f"    - {error}")
+            if len(result["errors"]) > 20:
+                print(f"    ... and {len(result['errors']) - 20} more errors")
+
         if args.verbose and result.get("fhir_bundle"):
             print(
                 f"\n  Bundle has {len(result['fhir_bundle'].get('entry', []))} entries"

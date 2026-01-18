@@ -29,6 +29,16 @@ RESOURCE_TRANSFORMERS: dict[str, Any] = {
     "Composition": transform_composition,
 }
 
+# Fields that should always be arrays (0..*) in FHIR
+ARRAY_FIELDS = {
+    "identifier",
+    "basedOn",
+    "partOf",
+    "category",
+    "performer",
+    "note",
+}
+
 
 def transform_bundle(
     r4_bundle: dict[str, Any],
@@ -62,6 +72,9 @@ def transform_bundle(
             try:
                 r5_resource = transformer(resource)
 
+                # Normalize array fields
+                r5_resource = _normalize_array_fields(r5_resource)
+
                 # Map MedicationStatement to MedicationUsage for counting
                 count_type = resource_type
                 if resource_type == "MedicationStatement":
@@ -89,7 +102,9 @@ def transform_bundle(
                 warnings.append(f"Failed to transform {resource_type}: {e!s}")
         else:
             # Pass through resources without specific transformers
-            r5_entries.append(entry)
+            # Still normalize array fields
+            normalized_resource = _normalize_array_fields(resource.copy())
+            r5_entries.append({**entry, "resource": normalized_resource})
 
             # Count known resource types
             if hasattr(counts, resource_type):
@@ -109,6 +124,22 @@ def transform_bundle(
         r5_bundle["timestamp"] = r4_bundle["timestamp"]
 
     return r5_bundle, counts, warnings
+
+
+def _normalize_array_fields(resource: dict[str, Any]) -> dict[str, Any]:
+    """
+    Ensure common array fields are always arrays.
+
+    Many FHIR fields like 'identifier' are 0..* (arrays) but may come
+    from MS Converter as single objects. This ensures compliance with
+    FHIR R5 schema.
+    """
+    for field in ARRAY_FIELDS:
+        if field in resource:
+            value = resource[field]
+            if not isinstance(value, list):
+                resource[field] = [value]
+    return resource
 
 
 def _transform_request(
