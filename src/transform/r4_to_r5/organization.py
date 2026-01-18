@@ -33,7 +33,12 @@ def transform_organization(r4_organization: dict[str, Any]) -> dict[str, Any]:
         org_contact: dict[str, Any] = {}
 
         if telecom:
-            org_contact["telecom"] = telecom if isinstance(telecom, list) else [telecom]
+            telecom_list = telecom if isinstance(telecom, list) else [telecom]
+            # Fix telecom use - organizations can't have "home" use
+            for t in telecom_list:
+                if t.get("use") == "home":
+                    t["use"] = "work"
+            org_contact["telecom"] = telecom_list
 
         if address:
             org_contact["address"] = (
