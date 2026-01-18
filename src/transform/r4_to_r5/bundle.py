@@ -198,13 +198,14 @@ def _clean_orphaned_encounter_refs(bundle: dict[str, Any]) -> list[str]:
             elif enc_id:
                 # No fullUrl, just mark the Encounter/{id} as valid
                 valid_encounter_refs.add(f"Encounter/{enc_id}")
-                logger.warning("Encounter %s has no fullUrl!", enc_id)
+                warnings.append(
+                    f"Encounter {enc_id} has no fullUrl - will use Encounter/id format"
+                )
 
-    logger.info(
-        "Found %d Encounters with %d valid refs, %d ID mappings",
-        encounter_count,
-        len(valid_encounter_refs),
-        len(enc_id_to_fullurl),
+    # Use warnings list instead of logging for visibility in response
+    warnings.append(
+        f"Encounter ref cleanup: {encounter_count} encounters, "
+        f"{len(valid_encounter_refs)} valid refs, {len(enc_id_to_fullurl)//2} ID mappings"
     )
 
     orphaned_count = 0
