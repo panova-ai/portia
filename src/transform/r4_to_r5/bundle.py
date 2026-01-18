@@ -166,30 +166,39 @@ def _transform_request(
 
 def _clean_orphaned_encounter_refs(bundle: dict[str, Any]) -> list[str]:
     """
-    Remove encounter references that point to Encounters not in the bundle.
+    Fix encounter references to use fullUrl format and remove orphaned ones.
 
-    This prevents 404 errors during persistence when resources reference
-    Encounters that were mentioned in the source but not included in the bundle.
+    FHIR transaction bundles require urn:uuid format for local references.
+    This converts Encounter/{id} references to the fullUrl format and removes
+    references to Encounters not in the bundle.
     """
     warnings: list[str] = []
 
-    # Build a set of valid Encounter references
+    # Build mappings of Encounter IDs to fullUrls
+    enc_id_to_fullurl: dict[str, str] = {}
     valid_encounter_refs: set[str] = set()
+
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
         if resource.get("resourceType") == "Encounter":
             enc_id = resource.get("id")
             full_url = entry.get("fullUrl")
 
-            if enc_id:
-                valid_encounter_refs.add(f"Encounter/{enc_id}")
             if full_url:
                 valid_encounter_refs.add(full_url)
+                if enc_id:
+                    enc_id_to_fullurl[enc_id] = full_url
+                    # Also map the Encounter/{id} format
+                    enc_id_to_fullurl[f"Encounter/{enc_id}"] = full_url
+            elif enc_id:
+                # No fullUrl, just mark the Encounter/{id} as valid
+                valid_encounter_refs.add(f"Encounter/{enc_id}")
 
     # Fields that may contain encounter references
     encounter_ref_fields = ["encounter", "context"]
 
     orphaned_count = 0
+    converted_count = 0
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
         resource_type = resource.get("resourceType")
@@ -202,11 +211,26 @@ def _clean_orphaned_encounter_refs(bundle: dict[str, Any]) -> list[str]:
                 ref_value = resource[field]
                 if isinstance(ref_value, dict):
                     ref_str = ref_value.get("reference", "")
-                    if ref_str and ref_str.startswith(("Encounter/", "urn:uuid:")):
+                    if not ref_str:
+                        continue
+
+                    # Check if reference is in Encounter/{id} format that needs conversion
+                    if (
+                        ref_str.startswith("Encounter/")
+                        and ref_str in enc_id_to_fullurl
+                    ):
+                        ref_value["reference"] = enc_id_to_fullurl[ref_str]
+                        converted_count += 1
+                    elif ref_str.startswith(("Encounter/", "urn:uuid:")):
+                        # Check if it's a valid reference
                         if ref_str not in valid_encounter_refs:
                             del resource[field]
                             orphaned_count += 1
 
+    if converted_count:
+        warnings.append(
+            f"Converted {converted_count} encounter references to fullUrl format"
+        )
     if orphaned_count:
         warnings.append(f"Removed {orphaned_count} orphaned encounter references")
 
