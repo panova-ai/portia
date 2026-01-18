@@ -15,6 +15,7 @@ from src.transform.r4_to_r5.encounter import transform_encounter
 from src.transform.r4_to_r5.immunization import transform_immunization
 from src.transform.r4_to_r5.medication import transform_medication_statement
 from src.transform.r4_to_r5.observation import transform_observation
+from src.transform.r4_to_r5.organization import transform_organization
 from src.transform.r4_to_r5.patient import transform_patient
 
 # Map R4 resource types to their transformers
@@ -27,6 +28,7 @@ RESOURCE_TRANSFORMERS: dict[str, Any] = {
     "Observation": transform_observation,
     "Encounter": transform_encounter,
     "Composition": transform_composition,
+    "Organization": transform_organization,
 }
 
 # Fields that should always be arrays (0..*) in FHIR

@@ -2,7 +2,8 @@
 Composition transformer for R4 to R5 conversion.
 
 Key changes in R5:
-- 'attester.party' renamed to 'attester.party' (stays same but mode changed)
+- 'subject' changed from single Reference (0..1) to array (0..*)
+- 'confidentiality' removed
 - 'attester.mode' changed from code to CodeableConcept
 - 'relatesTo.code' renamed to 'relatesTo.type'
 - 'relatesTo.target[x]' becomes 'relatesTo.resourceReference'
@@ -24,6 +25,15 @@ def transform_composition(r4_composition: dict[str, Any]) -> dict[str, Any]:
         R5-compatible Composition resource
     """
     r5_composition = r4_composition.copy()
+
+    # Remove 'confidentiality' field (removed in R5)
+    r5_composition.pop("confidentiality", None)
+
+    # Transform 'subject' from single Reference to array (R5 change)
+    if "subject" in r5_composition:
+        subject = r5_composition["subject"]
+        if isinstance(subject, dict):
+            r5_composition["subject"] = [subject]
 
     # Transform attester entries
     if "attester" in r5_composition:
