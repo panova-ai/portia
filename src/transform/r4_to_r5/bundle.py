@@ -210,16 +210,26 @@ def _clean_orphaned_encounter_refs(bundle: dict[str, Any]) -> list[str]:
 
     orphaned_count = 0
     converted_count = 0
+    total_refs_checked = 0
+    refs_by_type: dict[str, list[str]] = {}
 
     def process_reference(
         ref_value: dict[str, Any], resource_type: str, field: str
     ) -> bool:
         """Process a single reference, converting or removing as needed.
         Returns True if the reference should be deleted."""
-        nonlocal converted_count, orphaned_count
+        nonlocal converted_count, orphaned_count, total_refs_checked
         ref_str = ref_value.get("reference", "")
         if not ref_str:
             return False
+
+        # Track all encounter refs we see
+        if ref_str.startswith(("Encounter/", "urn:uuid:")):
+            total_refs_checked += 1
+            key = f"{resource_type}.{field}"
+            if key not in refs_by_type:
+                refs_by_type[key] = []
+            refs_by_type[key].append(ref_str[:50])  # Truncate for readability
 
         # Check if reference is in Encounter/{id} format that needs conversion
         if ref_str.startswith("Encounter/") and ref_str in enc_id_to_fullurl:
@@ -281,6 +291,20 @@ def _clean_orphaned_encounter_refs(bundle: dict[str, Any]) -> list[str]:
                 elif isinstance(enc_refs, dict):
                     if process_reference(enc_refs, resource_type, "context.encounter"):
                         del context["encounter"]
+
+        # Check Encounter.partOf (references another Encounter)
+        if resource_type == "Encounter" and "partOf" in resource:
+            ref_value = resource["partOf"]
+            if isinstance(ref_value, dict):
+                if process_reference(ref_value, resource_type, "partOf"):
+                    del resource["partOf"]
+
+    # Summary of references found
+    warnings.append(f"Checked {total_refs_checked} encounter refs")
+    for key, refs in refs_by_type.items():
+        warnings.append(
+            f"  {key}: {len(refs)} refs (sample: {refs[0] if refs else 'none'})"
+        )
 
     if converted_count:
         warnings.append(
