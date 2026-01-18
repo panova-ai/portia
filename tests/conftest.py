@@ -7,11 +7,13 @@ from uuid import UUID
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from src.clients.fhir_store import get_fhir_store_service
 from src.clients.ms_converter import get_ms_converter_service
 from src.clients.sentia import get_sentia_service
 from src.clients.storage import get_storage_service
 from src.core.auth import AuthenticatedUser, get_current_user
 from src.main import app
+from src.services.fhir_store_service import FHIRStoreService, PersistenceResult
 from src.services.ms_converter_service import MSConverterService
 from src.services.sentia_service import (
     OrganizationContext,
@@ -92,6 +94,25 @@ def mock_ms_converter_service() -> AsyncMock:
 
 
 @pytest.fixture
+def mock_fhir_store_service() -> AsyncMock:
+    """Mock FHIR store service for testing."""
+    mock = AsyncMock(spec=FHIRStoreService)
+
+    # Default successful persistence response
+    mock.persist_bundle.return_value = PersistenceResult(
+        success=True,
+        resources_created=2,
+        resources_updated=0,
+        errors=[],
+        id_mapping={
+            "urn:uuid:patient-1": "patient-1",
+            "urn:uuid:condition-1": "condition-1",
+        },
+    )
+    return mock
+
+
+@pytest.fixture
 def mock_sentia_service() -> AsyncMock:
     """Mock Sentia service for testing."""
     mock = AsyncMock(spec=SentiaService)
@@ -141,6 +162,7 @@ class ClientFactory(Protocol):
 def client_factory(
     mock_storage_service: MagicMock,
     mock_ms_converter_service: AsyncMock,
+    mock_fhir_store_service: AsyncMock,
     mock_sentia_service: AsyncMock,
     mock_authenticated_user: AuthenticatedUser,
 ) -> Generator[ClientFactory, None, None]:
@@ -150,6 +172,9 @@ def client_factory(
         app.dependency_overrides[get_storage_service] = lambda: mock_storage_service
         app.dependency_overrides[get_ms_converter_service] = (
             lambda: mock_ms_converter_service
+        )
+        app.dependency_overrides[get_fhir_store_service] = (
+            lambda: mock_fhir_store_service
         )
         app.dependency_overrides[get_sentia_service] = lambda: mock_sentia_service
         app.dependency_overrides[get_current_user] = lambda: mock_authenticated_user

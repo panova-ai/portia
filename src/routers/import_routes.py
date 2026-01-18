@@ -8,6 +8,7 @@ from src.exceptions import ConversionError, ValidationError
 from src.import_.gateway import process_import
 from src.routers.deps import (
     CurrentUserDep,
+    FHIRStoreServiceDep,
     MSConverterServiceDep,
     SentiaServiceDep,
 )
@@ -22,6 +23,7 @@ router = APIRouter(prefix="/import", tags=["Import"])
 async def import_data(
     request: ImportRequest,
     ms_converter: MSConverterServiceDep,
+    fhir_store: FHIRStoreServiceDep,
     current_user: CurrentUserDep,
     sentia_service: SentiaServiceDep,
 ) -> ImportResponse:
@@ -97,7 +99,12 @@ async def import_data(
         )
 
     try:
-        response = await process_import(request, ms_converter)
+        response = await process_import(
+            request,
+            ms_converter,
+            fhir_store=fhir_store,
+            organization_id=organization_id,
+        )
         return response
 
     except ValidationError as e:

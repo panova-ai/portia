@@ -6,15 +6,18 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, status
 from httpx import HTTPStatusError
 
+from src.clients.fhir_store import get_fhir_store_service
 from src.clients.ms_converter import get_ms_converter_service
 from src.clients.sentia import get_sentia_service
 from src.clients.storage import get_storage_service
 from src.core.auth import AuthenticatedUser, get_current_user
+from src.services.fhir_store_service import FHIRStoreService
 from src.services.ms_converter_service import MSConverterService
 from src.services.sentia_service import PractitionerOrgContext, SentiaService
 from src.services.storage_service import StorageService
 
 # Typed dependency aliases for use in endpoint signatures
+FHIRStoreServiceDep = Annotated[FHIRStoreService, Depends(get_fhir_store_service)]
 MSConverterServiceDep = Annotated[MSConverterService, Depends(get_ms_converter_service)]
 StorageServiceDep = Annotated[StorageService, Depends(get_storage_service)]
 SentiaServiceDep = Annotated[SentiaService, Depends(get_sentia_service)]

@@ -6,13 +6,14 @@ This module handles the complete import flow:
 2. Call MS Converter (C-CDA/HL7v2 → FHIR R4)
 3. Apply source-specific post-processing (e.g., CHARM encounter linking)
 4. Transform R4 → R5
-5. Return the transformed bundle
+5. Persist to FHIR store
+6. Return the response with persistence info
 """
 
 import base64
 from datetime import date
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from src.exceptions import ConversionError, ValidationError
 from src.import_.ccda_preprocessor import sanitize_ccda
@@ -25,7 +26,9 @@ from src.schemas.import_schemas import (
     ImportRequest,
     ImportResponse,
     ImportStatus,
+    PersistenceInfo,
 )
+from src.services.fhir_store_service import FHIRStoreService
 from src.services.ms_converter_service import CcdaTemplate, MSConverterService
 from src.transform.r4_to_r5 import transform_bundle
 
@@ -36,6 +39,8 @@ CHARM_SOURCE_SYSTEMS = {"charm", "charm_ehr", "charm-ehr"}
 async def process_import(
     request: ImportRequest,
     ms_converter: MSConverterService,
+    fhir_store: FHIRStoreService | None = None,
+    organization_id: UUID | None = None,
 ) -> ImportResponse:
     """
     Process an import request through the full pipeline.
@@ -43,6 +48,8 @@ async def process_import(
     Args:
         request: The import request with format and data
         ms_converter: MS FHIR Converter service client
+        fhir_store: Optional FHIR store service for persistence
+        organization_id: Optional organization ID for tagging resources
 
     Returns:
         ImportResponse with the converted FHIR R5 bundle
@@ -54,6 +61,7 @@ async def process_import(
     import_id = uuid4()
     warnings: list[str] = []
     errors: list[str] = []
+    persistence_info: PersistenceInfo | None = None
 
     # Decode base64 data
     try:
@@ -83,6 +91,24 @@ async def process_import(
     r5_bundle, counts, transform_warnings = transform_bundle(r4_bundle)
     warnings.extend(transform_warnings)
 
+    # Persist to FHIR store if service is provided
+    if fhir_store:
+        result = await fhir_store.persist_bundle(r5_bundle, organization_id)
+        persistence_info = PersistenceInfo(
+            persisted=result.success,
+            resources_created=result.resources_created,
+            resources_updated=result.resources_updated,
+        )
+        if result.errors:
+            errors.extend(result.errors)
+            warnings.append(
+                f"FHIR persistence completed with {len(result.errors)} errors"
+            )
+        else:
+            warnings.append(
+                f"Persisted {result.resources_created} resources to FHIR store"
+            )
+
     # Determine final status
     status = ImportStatus.COMPLETED
     if errors:
@@ -95,6 +121,7 @@ async def process_import(
         status=status,
         fhir_bundle=r5_bundle,
         resources_extracted=counts,
+        persistence=persistence_info,
         warnings=warnings,
         errors=errors,
     )

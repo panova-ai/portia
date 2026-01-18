@@ -124,6 +124,22 @@ class MatchingResult(BaseModel):
     )
 
 
+class PersistenceInfo(BaseModel):
+    """Information about FHIR store persistence."""
+
+    persisted: bool = Field(
+        description="Whether resources were successfully persisted to FHIR store"
+    )
+    resources_created: int = Field(
+        default=0,
+        description="Number of resources created in FHIR store",
+    )
+    resources_updated: int = Field(
+        default=0,
+        description="Number of resources updated in FHIR store",
+    )
+
+
 class ImportResponse(BaseModel):
     """Response model for import operation."""
 
@@ -140,6 +156,10 @@ class ImportResponse(BaseModel):
     matching_result: MatchingResult | None = Field(
         default=None,
         description="Result of patient matching (if matching was performed)",
+    )
+    persistence: PersistenceInfo | None = Field(
+        default=None,
+        description="Result of FHIR store persistence (if persistence was enabled)",
     )
     warnings: list[str] = Field(
         default_factory=list,
