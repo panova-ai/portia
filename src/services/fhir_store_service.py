@@ -11,6 +11,7 @@ from uuid import UUID
 
 from fhir_client.client import FHIRClient
 from fhir_client.config import FHIRClientConfig
+from httpx import HTTPStatusError
 
 from src.settings import settings
 
@@ -115,6 +116,34 @@ class FHIRStoreService:
                 id_mapping=id_mapping,
             )
 
+        except HTTPStatusError as e:
+            # Extract OperationOutcome from response body for detailed error info
+            error_details = [str(e)]
+            try:
+                response_body = e.response.json()
+                if response_body.get("resourceType") == "OperationOutcome":
+                    issues = response_body.get("issue", [])
+                    for issue in issues:
+                        severity = issue.get("severity", "error")
+                        diagnostics = issue.get("diagnostics", "")
+                        details = issue.get("details", {}).get("text", "")
+                        error_msg = (
+                            f"{severity}: {diagnostics or details or 'Unknown error'}"
+                        )
+                        error_details.append(error_msg)
+                        logger.error("FHIR error: %s", error_msg)
+                else:
+                    logger.error("FHIR error response: %s", response_body)
+            except Exception:
+                logger.error("Could not parse error response body")
+
+            return PersistenceResult(
+                success=False,
+                resources_created=0,
+                resources_updated=0,
+                errors=error_details,
+                id_mapping={},
+            )
         except Exception as e:
             logger.exception("Failed to persist bundle: %s", e)
             return PersistenceResult(
