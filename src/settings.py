@@ -43,7 +43,7 @@ class Settings(BaseSettings):
         description="GCP Healthcare API dataset name",
     )
     gcp_fhir_store: str = Field(
-        default="fhir_store_r5",
+        default="fhir_store",
         description="FHIR store name within the dataset",
     )
 
