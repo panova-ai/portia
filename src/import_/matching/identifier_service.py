@@ -227,7 +227,21 @@ def add_identifiers_to_bundle(
     identifier_to_fullurl: dict[str, str] = {}
     # Maps duplicate fullUrl/ID -> kept fullUrl (for reference remapping)
     duplicate_refs: dict[str, str] = {}
+    # Maps ResourceType/id -> fullUrl for ALL resources (to normalize references)
+    id_to_fullurl: dict[str, str] = {}
 
+    # First pass: collect all resource id -> fullUrl mappings
+    for entry in bundle.get("entry", []):
+        resource = entry.get("resource", {})
+        resource_type = resource.get("resourceType")
+        entry_fullurl = entry.get("fullUrl", "")
+        resource_id = resource.get("id", "")
+
+        if resource_type and resource_id and entry_fullurl:
+            # Map "ResourceType/id" -> fullUrl for reference normalization
+            id_to_fullurl[f"{resource_type}/{resource_id}"] = entry_fullurl
+
+    # Second pass: process identifiers and mark duplicates
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
         resource_type = resource.get("resourceType")
@@ -325,12 +339,24 @@ def add_identifiers_to_bundle(
             else:
                 resource["subject"] = subject_ref
 
-    # Remap references from duplicate resources to kept resources
-    if duplicate_refs:
-        logger.warning(f"Remapping references for {len(duplicate_refs)} duplicates")
-        for old_ref, new_ref in duplicate_refs.items():
-            logger.warning(f"  {old_ref} -> {new_ref}")
-        _remap_references(bundle, duplicate_refs)
+    # Build the complete reference map:
+    # 1. Duplicate refs -> kept fullUrl
+    # 2. ResourceType/id -> fullUrl (normalize all references)
+    ref_map: dict[str, str] = {}
+
+    # First add id_to_fullurl (for all resources)
+    for id_ref, fullurl in id_to_fullurl.items():
+        # Only add if not already a urn:uuid reference
+        if id_ref != fullurl:
+            ref_map[id_ref] = fullurl
+
+    # Then add duplicate refs (overrides if needed)
+    ref_map.update(duplicate_refs)
+
+    # Remap references to normalize all to fullUrl format
+    if ref_map:
+        logger.warning(f"Remapping {len(ref_map)} references")
+        _remap_references(bundle, ref_map)
 
     # Remove duplicate entries (marked earlier)
     duplicates_removed = sum(1 for e in bundle.get("entry", []) if e.get("_duplicate"))
