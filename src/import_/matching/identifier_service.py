@@ -384,6 +384,14 @@ def add_identifiers_to_bundle(
             f"Found {len(unrewritten)} unrewritten Encounter/ refs: {unrewritten[:5]}"
         )
 
+    # Log final resource counts and verify kept Encounter exists
+    resource_counts: dict[str, int] = {}
+    for entry in bundle.get("entry", []):
+        resource = entry.get("resource", {})
+        rtype = resource.get("resourceType", "Unknown")
+        resource_counts[rtype] = resource_counts.get(rtype, 0) + 1
+    logger.warning(f"Final bundle: {resource_counts}")
+
     return bundle
 
 
