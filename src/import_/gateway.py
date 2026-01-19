@@ -122,6 +122,13 @@ async def process_import(
     # Inline medication concepts for UI compatibility
     _inline_medication_concepts(r5_bundle)
 
+    # Filter out NKDA (No Known Drug Allergy) entries that have no actual substance
+    nkda_count = _filter_nkda_allergies(r5_bundle)
+    if nkda_count > 0:
+        warnings.append(f"Filtered {nkda_count} 'No Known Drug Allergy' entries")
+        # Update counts to reflect filtered allergies
+        counts.AllergyIntolerance = max(0, counts.AllergyIntolerance - nkda_count)
+
     # Set organization on Patient resources
     if organization_id:
         _set_patient_organization(r5_bundle, organization_id)
@@ -641,6 +648,48 @@ def _inline_medication_concepts(bundle: dict[str, Any]) -> None:
                         "coding": med_code.get("coding", []),
                         "text": display_text,
                     }
+
+
+def _filter_nkda_allergies(bundle: dict[str, Any]) -> int:
+    """
+    Filter out NKDA (No Known Drug Allergy) entries from the bundle.
+
+    MS Converter creates AllergyIntolerance resources for NKDA statements
+    in C-CDA (negationInd="true"), but these have no actual allergen code.
+    These should not be displayed as allergies in the UI.
+
+    Args:
+        bundle: The FHIR bundle to filter
+
+    Returns:
+        Number of NKDA entries filtered out
+    """
+    filtered_count = 0
+    new_entries = []
+
+    for entry in bundle.get("entry", []):
+        resource = entry.get("resource", {})
+
+        if resource.get("resourceType") == "AllergyIntolerance":
+            # Check if this has a meaningful code (actual allergen)
+            code = resource.get("code", {})
+            codings = code.get("coding", [])
+            text = code.get("text", "")
+
+            # Filter out if no code/coding and no meaningful text
+            has_meaningful_code = bool(codings) or (
+                text and text.lower() not in ["", "unknown", "none", "n/a"]
+            )
+
+            if not has_meaningful_code:
+                # This is likely an NKDA entry - filter it out
+                filtered_count += 1
+                continue
+
+        new_entries.append(entry)
+
+    bundle["entry"] = new_entries
+    return filtered_count
 
 
 def _replace_references(obj: Any, old_ref: str, new_ref: str) -> None:

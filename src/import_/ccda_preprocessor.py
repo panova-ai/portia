@@ -28,7 +28,10 @@ NUMERIC_VALUE_ELEMENTS = [
 # Pattern to detect non-numeric values (allows decimals and negative numbers)
 NUMERIC_PATTERN = re.compile(r"^-?\d+(\.\d+)?$")
 
-# Pattern to extract the first number from a range like "1-2"
+# Pattern to detect a range like "1-2" or "0.5-1"
+RANGE_PATTERN = re.compile(r"^(-?\d+(?:\.\d+)?)\s*-\s*(-?\d+(?:\.\d+)?)$")
+
+# Pattern to extract the first number from other non-numeric values
 FIRST_NUMBER_PATTERN = re.compile(r"^(-?\d+(?:\.\d+)?)")
 
 
@@ -97,23 +100,38 @@ def _fix_numeric_value_attributes(root: ET.Element) -> list[str]:
                 if value is not None and not NUMERIC_PATTERN.match(value):
                     original_value = value
 
-                    # Try to extract first number from range (e.g., "1-2" -> "1")
-                    match = FIRST_NUMBER_PATTERN.match(value)
+                    # Try to detect a range like "1-2" and use average
+                    range_match = RANGE_PATTERN.match(value)
 
-                    if match:
-                        new_value = match.group(1)
+                    if range_match:
+                        low = float(range_match.group(1))
+                        high = float(range_match.group(2))
+                        avg = (low + high) / 2
+                        # Format nicely: use integer if whole number
+                        new_value = str(int(avg)) if avg == int(avg) else str(avg)
                         elem.set("value", new_value)
                         warnings.append(
                             f"Sanitized {element_name}/@value: "
-                            f"'{original_value}' -> '{new_value}'"
+                            f"'{original_value}' -> '{new_value}' (average of range)"
                         )
                     else:
-                        # Can't extract a number, use nullFlavor instead
-                        del elem.attrib["value"]
-                        elem.set("nullFlavor", "NI")
-                        warnings.append(
-                            f"Sanitized {element_name}/@value: "
-                            f"'{original_value}' -> nullFlavor='NI'"
-                        )
+                        # Try to extract first number from other non-numeric values
+                        match = FIRST_NUMBER_PATTERN.match(value)
+
+                        if match:
+                            new_value = match.group(1)
+                            elem.set("value", new_value)
+                            warnings.append(
+                                f"Sanitized {element_name}/@value: "
+                                f"'{original_value}' -> '{new_value}'"
+                            )
+                        else:
+                            # Can't extract a number, use nullFlavor instead
+                            del elem.attrib["value"]
+                            elem.set("nullFlavor", "NI")
+                            warnings.append(
+                                f"Sanitized {element_name}/@value: "
+                                f"'{original_value}' -> nullFlavor='NI'"
+                            )
 
     return warnings
