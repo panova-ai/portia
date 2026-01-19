@@ -295,6 +295,11 @@ def add_identifiers_to_bundle(
                     duplicate_refs[entry_fullurl] = kept_fullurl
                 if resource.get("id"):
                     duplicate_refs[entry_id] = kept_fullurl
+                import logging
+
+                logging.getLogger(__name__).info(
+                    f"Duplicate {resource_type}: {entry_id} -> {kept_fullurl}"
+                )
             else:
                 entry_fullurl = entry.get("fullUrl", "")
                 identifier_to_fullurl[search_param] = entry_fullurl
