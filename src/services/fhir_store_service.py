@@ -197,34 +197,36 @@ class FHIRStoreService:
 
             full_url = entry.get("fullUrl", "")
 
-            # Use existing request if present (for conditional PUT from identifier service)
-            # Otherwise, construct a default request
-            existing_request = entry.get("request")
-            if (
-                existing_request
-                and existing_request.get("method")
-                and existing_request.get("url")
-            ):
-                request = existing_request
-            else:
-                # For resources with urn:uuid fullUrl, use POST to let server assign IDs
-                # This is more compatible with GCP Healthcare API's reference resolution
-                use_post = full_url.startswith("urn:uuid:")
+            # For resources with urn:uuid fullUrl, always use POST to let server assign IDs
+            # This is required for GCP Healthcare API's reference resolution
+            # Do NOT use existing requests from MS Converter as they use ResourceType/id format
+            use_post = full_url.startswith("urn:uuid:")
 
+            if use_post:
+                # POST to resource type endpoint - server will resolve urn:uuid refs
                 request = {
-                    "method": (
-                        "POST" if use_post else ("PUT" if resource_id else "POST")
-                    ),
-                    "url": (
-                        resource_type
-                        if use_post
-                        else (
+                    "method": "POST",
+                    "url": resource_type,
+                }
+            else:
+                # For non-urn:uuid fullUrls, use existing request if present
+                # or construct a PUT/POST request
+                existing_request = entry.get("request")
+                if (
+                    existing_request
+                    and existing_request.get("method")
+                    and existing_request.get("url")
+                ):
+                    request = existing_request
+                else:
+                    request = {
+                        "method": "PUT" if resource_id else "POST",
+                        "url": (
                             f"{resource_type}/{resource_id}"
                             if resource_id
                             else resource_type
-                        )
-                    ),
-                }
+                        ),
+                    }
 
             # Create transaction entry
             transaction_entry: dict[str, Any] = {
