@@ -279,12 +279,12 @@ def add_identifiers_to_bundle(
                     patient_id, code, eff_date
                 )
 
-        # Add identifier and conditional request (skip duplicates)
+        # Add identifier and conditional request (mark duplicates for removal)
         if identifier:
             search_param = identifier.to_search_param()
             if search_param in assigned_identifiers:
-                # Skip - another resource already has this identifier
-                identifier = None
+                # Mark for removal - another resource already has this identifier
+                entry["_duplicate"] = True
             else:
                 assigned_identifiers.add(search_param)
                 identifier_service.add_identifier_to_resource(resource, identifier)
@@ -300,6 +300,9 @@ def add_identifiers_to_bundle(
                 resource["subject"] = [subject_ref]
             else:
                 resource["subject"] = subject_ref
+
+    # Remove duplicate entries (marked earlier)
+    bundle["entry"] = [e for e in bundle.get("entry", []) if not e.get("_duplicate")]
 
     return bundle
 
