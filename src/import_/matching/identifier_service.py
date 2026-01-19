@@ -231,15 +231,29 @@ def add_identifiers_to_bundle(
     id_to_fullurl: dict[str, str] = {}
 
     # First pass: collect all resource id -> fullUrl mappings
+    encounter_count = 0
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
         resource_type = resource.get("resourceType")
         entry_fullurl = entry.get("fullUrl", "")
         resource_id = resource.get("id", "")
 
+        if resource_type == "Encounter":
+            encounter_count += 1
+            if not resource_id or not entry_fullurl:
+                logger.warning(
+                    f"Encounter #{encounter_count} missing id or fullUrl: "
+                    f"id={resource_id}, fullUrl={entry_fullurl}"
+                )
+
         if resource_type and resource_id and entry_fullurl:
             # Map "ResourceType/id" -> fullUrl for reference normalization
             id_to_fullurl[f"{resource_type}/{resource_id}"] = entry_fullurl
+
+    logger.warning(
+        f"Collected {len(id_to_fullurl)} id->fullUrl mappings, "
+        f"{sum(1 for k in id_to_fullurl if k.startswith('Encounter/'))} are Encounters"
+    )
 
     # Second pass: process identifiers and mark duplicates
     for entry in bundle.get("entry", []):
