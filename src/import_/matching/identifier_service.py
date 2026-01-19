@@ -219,6 +219,10 @@ def add_identifiers_to_bundle(
     # Change bundle type to transaction for conditional operations
     bundle["type"] = "transaction"
 
+    # Track assigned identifiers to avoid duplicates in the same bundle
+    # (e.g., MS Converter and CHARM both create Encounters for same date)
+    assigned_identifiers: set[str] = set()
+
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
         resource_type = resource.get("resourceType")
@@ -235,6 +239,9 @@ def add_identifiers_to_bundle(
                 identifier = identifier_service.encounter_identifier(
                     patient_id, enc_date
                 )
+                # Skip if we already assigned this identifier to another Encounter
+                if identifier and identifier.to_search_param() in assigned_identifiers:
+                    identifier = None
 
         elif resource_type == "Condition":
             # Extract code and onset
@@ -277,6 +284,8 @@ def add_identifiers_to_bundle(
 
         # Add identifier and conditional request
         if identifier:
+            # Track to avoid duplicates in the same bundle
+            assigned_identifiers.add(identifier.to_search_param())
             identifier_service.add_identifier_to_resource(resource, identifier)
             entry["request"] = identifier_service.create_conditional_request(
                 resource_type, identifier
