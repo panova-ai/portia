@@ -18,7 +18,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from src.exceptions import ConversionError, ValidationError
-from src.import_.ccda_preprocessor import sanitize_ccda
+from src.import_.ccda_preprocessor import DoseRangeInfo, sanitize_ccda
 from src.import_.charm.composition_builder import build_compositions
 from src.import_.charm.extractor import CharmCcdaExtractor
 from src.import_.charm.linker import link_resources_to_encounters
@@ -99,8 +99,9 @@ async def process_import(
     is_charm = source_system in CHARM_SOURCE_SYSTEMS
 
     # Route to appropriate handler based on format
+    dose_ranges: list[DoseRangeInfo] = []
     if request.format == ImportFormat.CCDA:
-        r4_bundle, format_warnings = await _process_ccda(
+        r4_bundle, format_warnings, dose_ranges = await _process_ccda(
             content,
             ms_converter,
             is_charm=is_charm,
@@ -118,6 +119,10 @@ async def process_import(
     # Transform R4 to R5
     r5_bundle, counts, transform_warnings = transform_bundle(r4_bundle)
     warnings.extend(transform_warnings)
+
+    # Convert dose quantities to dose ranges where applicable
+    if dose_ranges:
+        _convert_dose_quantities_to_ranges(r5_bundle, dose_ranges)
 
     # Inline medication concepts for UI compatibility
     _inline_medication_concepts(r5_bundle)
@@ -203,7 +208,7 @@ async def _process_ccda(
     is_charm: bool = False,
     organization_id: UUID | None = None,
     practitioner_role_id: UUID | None = None,
-) -> tuple[dict[str, Any], list[str]]:
+) -> tuple[dict[str, Any], list[str], list[DoseRangeInfo]]:
     """
     Process a C-CDA document.
 
@@ -215,12 +220,12 @@ async def _process_ccda(
         practitioner_role_id: Target PractitionerRole for encounter participant
 
     Returns:
-        Tuple of (FHIR R4 Bundle, warnings)
+        Tuple of (FHIR R4 Bundle, warnings, dose_ranges)
     """
     warnings: list[str] = []
 
     # Pre-process C-CDA to fix values that cause MS Converter failures
-    content, sanitize_warnings = sanitize_ccda(content)
+    content, sanitize_warnings, dose_ranges = sanitize_ccda(content)
     warnings.extend(sanitize_warnings)
 
     # Validate the C-CDA
@@ -247,7 +252,7 @@ async def _process_ccda(
         )
         warnings.extend(charm_warnings)
 
-    return r4_bundle, warnings
+    return r4_bundle, warnings, dose_ranges
 
 
 def _detect_charm_source(content: str) -> bool:
@@ -648,6 +653,61 @@ def _inline_medication_concepts(bundle: dict[str, Any]) -> None:
                         "coding": med_code.get("coding", []),
                         "text": display_text,
                     }
+
+
+def _convert_dose_quantities_to_ranges(
+    bundle: dict[str, Any], dose_ranges: list[DoseRangeInfo]
+) -> None:
+    """
+    Convert doseQuantity to doseRange for MedicationStatements with range dosages.
+
+    When C-CDA contains dose ranges like "1-2 tablets", MS Converter can only
+    handle single numeric values. We sanitize to the average for conversion,
+    then post-process to restore the proper doseRange structure.
+
+    Args:
+        bundle: The FHIR bundle to modify
+        dose_ranges: List of DoseRangeInfo from C-CDA sanitization
+    """
+    if not dose_ranges:
+        return
+
+    # Process each MedicationStatement and convert matching dose quantities
+    range_idx = 0
+    for entry in bundle.get("entry", []):
+        resource = entry.get("resource", {})
+        if resource.get("resourceType") != "MedicationStatement":
+            continue
+
+        dosages = resource.get("dosage", [])
+        for dosage in dosages:
+            dose_and_rate_list = dosage.get("doseAndRate", [])
+            for dose_and_rate in dose_and_rate_list:
+                dose_quantity = dose_and_rate.get("doseQuantity")
+
+                if dose_quantity and range_idx < len(dose_ranges):
+                    range_info = dose_ranges[range_idx]
+
+                    # Check if this quantity's value matches what we expect
+                    # (the average we set during sanitization)
+                    current_value = dose_quantity.get("value")
+                    expected_avg = (range_info.low + range_info.high) / 2
+
+                    # Allow small floating point differences
+                    if (
+                        current_value is not None
+                        and abs(float(current_value) - expected_avg) < 0.01
+                    ):
+                        # Convert to doseRange
+                        unit = dose_quantity.get("unit") or range_info.unit
+
+                        dose_and_rate["doseRange"] = {
+                            "low": {"value": range_info.low, "unit": unit},
+                            "high": {"value": range_info.high, "unit": unit},
+                        }
+                        # Remove the doseQuantity
+                        del dose_and_rate["doseQuantity"]
+                        range_idx += 1
 
 
 def _filter_nkda_allergies(bundle: dict[str, Any]) -> int:

@@ -11,11 +11,22 @@ Known issues handled:
 """
 
 import re
+from dataclasses import dataclass
 from xml.etree import ElementTree as ET
 
 # C-CDA namespace
 CDA_NS = "urn:hl7-org:v3"
 NAMESPACES = {"cda": CDA_NS}
+
+
+@dataclass
+class DoseRangeInfo:
+    """Information about a dose range that was sanitized."""
+
+    low: float
+    high: float
+    unit: str | None = None
+
 
 # Elements with 'value' attributes that must be numeric
 NUMERIC_VALUE_ELEMENTS = [
@@ -35,7 +46,7 @@ RANGE_PATTERN = re.compile(r"^(-?\d+(?:\.\d+)?)\s*-\s*(-?\d+(?:\.\d+)?)$")
 FIRST_NUMBER_PATTERN = re.compile(r"^(-?\d+(?:\.\d+)?)")
 
 
-def sanitize_ccda(content: str) -> tuple[str, list[str]]:
+def sanitize_ccda(content: str) -> tuple[str, list[str], list[DoseRangeInfo]]:
     """
     Sanitize a C-CDA document to fix values that cause MS Converter failures.
 
@@ -43,9 +54,14 @@ def sanitize_ccda(content: str) -> tuple[str, list[str]]:
         content: The raw C-CDA XML content
 
     Returns:
-        Tuple of (sanitized XML string, list of warnings about changes made)
+        Tuple of (sanitized XML string, warnings, dose_ranges)
+        - sanitized: The sanitized XML content
+        - warnings: List of warning messages about changes made
+        - dose_ranges: List of DoseRangeInfo for ranges that were sanitized
+                       (to be used for post-processing FHIR output)
     """
     warnings: list[str] = []
+    dose_ranges: list[DoseRangeInfo] = []
 
     try:
         # Register namespace to preserve it in output
@@ -54,8 +70,9 @@ def sanitize_ccda(content: str) -> tuple[str, list[str]]:
         root = ET.fromstring(content)
 
         # Fix numeric value attributes
-        fixes = _fix_numeric_value_attributes(root)
+        fixes, ranges = _fix_numeric_value_attributes(root)
         warnings.extend(fixes)
+        dose_ranges.extend(ranges)
 
         # Convert back to string
         sanitized = ET.tostring(root, encoding="unicode")
@@ -67,27 +84,31 @@ def sanitize_ccda(content: str) -> tuple[str, list[str]]:
             if decl_match:
                 sanitized = decl_match.group(1) + "\n" + sanitized
 
-        return sanitized, warnings
+        return sanitized, warnings, dose_ranges
 
     except ET.ParseError as e:
         # If XML parsing fails, return original content with warning
-        return content, [f"XML parsing failed, skipping sanitization: {e}"]
+        return content, [f"XML parsing failed, skipping sanitization: {e}"], []
 
 
-def _fix_numeric_value_attributes(root: ET.Element) -> list[str]:
+def _fix_numeric_value_attributes(
+    root: ET.Element,
+) -> tuple[list[str], list[DoseRangeInfo]]:
     """
     Find and fix elements with non-numeric 'value' attributes.
 
     For elements like doseQuantity that expect numeric values,
     this function:
     1. Detects non-numeric values like "1-2"
-    2. Extracts the first number if possible (e.g., "1" from "1-2")
-    3. Falls back to nullFlavor="NI" if no number can be extracted
+    2. Uses average for MS Converter compatibility
+    3. Records original range for FHIR post-processing
+    4. Falls back to nullFlavor="NI" if no number can be extracted
 
     Returns:
-        List of warning messages about fixes applied
+        Tuple of (warnings, dose_ranges)
     """
     warnings: list[str] = []
+    dose_ranges: list[DoseRangeInfo] = []
 
     for element_name in NUMERIC_VALUE_ELEMENTS:
         # Search with and without namespace
@@ -110,9 +131,19 @@ def _fix_numeric_value_attributes(root: ET.Element) -> list[str]:
                         # Format nicely: use integer if whole number
                         new_value = str(int(avg)) if avg == int(avg) else str(avg)
                         elem.set("value", new_value)
+
+                        # Get unit if available
+                        unit = elem.get("unit")
+
+                        # Record the range for FHIR post-processing
+                        if element_name == "doseQuantity":
+                            dose_ranges.append(
+                                DoseRangeInfo(low=low, high=high, unit=unit)
+                            )
+
                         warnings.append(
                             f"Sanitized {element_name}/@value: "
-                            f"'{original_value}' -> '{new_value}' (average of range)"
+                            f"'{original_value}' -> '{new_value}' (will use doseRange)"
                         )
                     else:
                         # Try to extract first number from other non-numeric values
@@ -134,4 +165,4 @@ def _fix_numeric_value_attributes(root: ET.Element) -> list[str]:
                                 f"'{original_value}' -> nullFlavor='NI'"
                             )
 
-    return warnings
+    return warnings, dose_ranges
