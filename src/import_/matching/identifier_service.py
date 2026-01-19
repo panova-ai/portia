@@ -377,6 +377,13 @@ def add_identifiers_to_bundle(
     bundle["entry"] = [e for e in bundle.get("entry", []) if not e.get("_duplicate")]
     logger.warning(f"Removed {duplicates_removed} duplicate entries from bundle")
 
+    # Check for unrewritten Encounter references
+    unrewritten = _find_unrewritten_refs(bundle, "Encounter/")
+    if unrewritten:
+        logger.warning(
+            f"Found {len(unrewritten)} unrewritten Encounter/ refs: {unrewritten[:5]}"
+        )
+
     return bundle
 
 
@@ -388,6 +395,12 @@ def _remap_references(bundle: dict[str, Any], ref_map: dict[str, str]) -> None:
         bundle: The FHIR bundle to update
         ref_map: Map of old reference -> new reference
     """
+    # Log Encounter mappings specifically
+    encounter_mappings = {k: v for k, v in ref_map.items() if "Encounter" in k}
+    logger.warning(f"Encounter mappings in ref_map: {len(encounter_mappings)}")
+    for k, v in list(encounter_mappings.items())[:5]:
+        logger.warning(f"  {k} -> {v}")
+
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
         _remap_refs_in_obj(resource, ref_map)
@@ -425,6 +438,33 @@ def _remap_refs_in_obj(obj: Any, ref_map: dict[str, str]) -> None:
     elif isinstance(obj, list):
         for item in obj:
             _remap_refs_in_obj(item, ref_map)
+
+
+def _find_unrewritten_refs(bundle: dict[str, Any], prefix: str) -> list[str]:
+    """Find references that still start with the given prefix."""
+    refs: list[str] = []
+    for entry in bundle.get("entry", []):
+        resource = entry.get("resource", {})
+        _collect_refs(resource, prefix, refs)
+    return refs
+
+
+def _collect_refs(obj: Any, prefix: str, refs: list[str]) -> None:
+    """Recursively collect references matching the prefix."""
+    if isinstance(obj, dict):
+        if "reference" in obj:
+            ref_value = obj["reference"]
+            if isinstance(ref_value, str) and ref_value.startswith(prefix):
+                refs.append(ref_value)
+            elif isinstance(ref_value, dict) and "reference" in ref_value:
+                nested = ref_value["reference"]
+                if isinstance(nested, str) and nested.startswith(prefix):
+                    refs.append(nested)
+        for value in obj.values():
+            _collect_refs(value, prefix, refs)
+    elif isinstance(obj, list):
+        for item in obj:
+            _collect_refs(item, prefix, refs)
 
 
 def _extract_date(value: str | None) -> date | None:
