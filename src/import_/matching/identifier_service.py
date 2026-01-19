@@ -380,14 +380,31 @@ def _remap_references(bundle: dict[str, Any], ref_map: dict[str, str]) -> None:
 
 
 def _remap_refs_in_obj(obj: Any, ref_map: dict[str, str]) -> None:
-    """Recursively update references in a FHIR object."""
+    """Recursively update references in a FHIR object.
+
+    Handles both simple Reference and R5 CodeableReference structures:
+    - Simple: {"reference": "Encounter/xxx"}
+    - CodeableReference: {"reference": {"reference": "Encounter/xxx"}}
+    """
     if isinstance(obj, dict):
-        # Check if this is a Reference
-        if "reference" in obj and isinstance(obj["reference"], str):
-            old_ref = obj["reference"]
-            if old_ref in ref_map:
-                logger.warning(f"Remapping reference: {old_ref} -> {ref_map[old_ref]}")
-                obj["reference"] = ref_map[old_ref]
+        # Check if this is a Reference (simple or nested)
+        if "reference" in obj:
+            ref_value = obj["reference"]
+            if isinstance(ref_value, str):
+                # Simple Reference: {"reference": "Encounter/xxx"}
+                if ref_value in ref_map:
+                    logger.warning(
+                        f"Remapping reference: {ref_value} -> {ref_map[ref_value]}"
+                    )
+                    obj["reference"] = ref_map[ref_value]
+            elif isinstance(ref_value, dict) and "reference" in ref_value:
+                # Nested CodeableReference: {"reference": {"reference": "Encounter/xxx"}}
+                nested_ref = ref_value["reference"]
+                if isinstance(nested_ref, str) and nested_ref in ref_map:
+                    logger.warning(
+                        f"Remapping nested reference: {nested_ref} -> {ref_map[nested_ref]}"
+                    )
+                    ref_value["reference"] = ref_map[nested_ref]
         # Recurse into nested objects
         for value in obj.values():
             _remap_refs_in_obj(value, ref_map)
