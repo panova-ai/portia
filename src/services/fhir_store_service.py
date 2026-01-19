@@ -272,6 +272,126 @@ class FHIRStoreService:
         return resource
 
 
+@dataclass
+class DeletionResult:
+    """Result of deleting imported resources."""
+
+    success: bool
+    resources_deleted: int
+    errors: list[str]
+
+
+# Import source tag system (must match identifier_service.py)
+IMPORT_SOURCE_TAG_SYSTEM = "https://panova.ai/import-source"
+
+
+async def delete_imported_resources(
+    fhir_client: FHIRClient,
+    patient_id: UUID,
+    source_system: str,
+    resource_types: list[str],
+) -> DeletionResult:
+    """
+    Delete import-created resources for a patient.
+
+    Only deletes resources tagged with the specified import source,
+    preserving manually-created resources.
+
+    Args:
+        fhir_client: FHIR client for API calls
+        patient_id: Patient whose imported resources should be deleted
+        source_system: Import source tag to match (e.g., "charm")
+        resource_types: List of resource types to delete
+
+    Returns:
+        DeletionResult with count and any errors
+    """
+    errors: list[str] = []
+    total_deleted = 0
+
+    tag_filter = f"{IMPORT_SOURCE_TAG_SYSTEM}|{source_system}"
+
+    for resource_type in resource_types:
+        try:
+            # Build search parameters
+            # Use subject for most resources, patient for Observation
+            if resource_type == "Observation":
+                patient_param = "patient"
+            else:
+                patient_param = "subject"
+
+            search_params = {
+                patient_param: f"Patient/{patient_id}",
+                "_tag": tag_filter,
+                "_count": "1000",  # Get all matching resources
+            }
+
+            # Search for resources to delete
+            logger.info(
+                "Searching for %s resources to delete (patient=%s, tag=%s)",
+                resource_type,
+                patient_id,
+                source_system,
+            )
+
+            # Use BaseClient's _search_resource method (via patients client)
+            response = await fhir_client.patients._search_resource(
+                resource_type, search_params
+            )
+
+            entries = response.get("entry", [])
+            if not entries:
+                logger.debug("No %s resources found for deletion", resource_type)
+                continue
+
+            logger.info("Found %d %s resources to delete", len(entries), resource_type)
+
+            # Delete each resource
+            for entry in entries:
+                resource = entry.get("resource", {})
+                resource_id = resource.get("id")
+                if resource_id:
+                    try:
+                        # Use BaseClient's _delete_resource method
+                        await fhir_client.patients._delete_resource(
+                            resource_type, UUID(resource_id)
+                        )
+                        total_deleted += 1
+                    except HTTPStatusError as e:
+                        if e.response.status_code == 404:
+                            # Already deleted, ignore
+                            pass
+                        else:
+                            errors.append(
+                                f"Failed to delete {resource_type}/{resource_id}: {e}"
+                            )
+                    except Exception as e:
+                        errors.append(
+                            f"Failed to delete {resource_type}/{resource_id}: {e}"
+                        )
+
+        except HTTPStatusError as e:
+            if e.response.status_code == 404:
+                # Resource type might not exist or no results, ignore
+                logger.debug("No %s resources found (404)", resource_type)
+            else:
+                errors.append(f"Failed to search {resource_type}: {e}")
+        except Exception as e:
+            errors.append(f"Failed to search {resource_type}: {e}")
+
+    logger.info(
+        "Deletion complete: %d resources deleted, %d errors",
+        total_deleted,
+        len(errors),
+    )
+
+    return DeletionResult(
+        success=len(errors) == 0,
+        resources_deleted=total_deleted,
+        errors=errors,
+    )
+
+
 def create_fhir_store_service() -> FHIRStoreService:
     """Create a FHIRStoreService with default configuration."""
     config = FHIRClientConfig(

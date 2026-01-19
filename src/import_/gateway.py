@@ -23,8 +23,9 @@ from src.import_.charm.composition_builder import build_compositions
 from src.import_.charm.extractor import CharmCcdaExtractor
 from src.import_.charm.linker import link_resources_to_encounters
 from src.import_.matching.identifier_service import (
-    IdentifierService,
-    add_identifiers_to_bundle,
+    get_import_resource_types,
+    remove_duplicate_resources,
+    tag_bundle_for_import,
 )
 from src.import_.matching.patient_matcher import (
     MatchResult,
@@ -40,7 +41,11 @@ from src.schemas.import_schemas import (
     ImportStatus,
     PersistenceInfo,
 )
-from src.services.fhir_store_service import FHIRStoreService, PersistenceResult
+from src.services.fhir_store_service import (
+    FHIRStoreService,
+    PersistenceResult,
+    delete_imported_resources,
+)
 from src.services.ms_converter_service import CcdaTemplate, MSConverterService
 from src.transform.r4_to_r5 import transform_bundle
 
@@ -142,6 +147,11 @@ async def process_import(
     if organization_id:
         _set_patient_organization(r5_bundle, organization_id)
 
+    # Determine import source system
+    source_system = (request.metadata or {}).get("source_system", "").lower()
+    if not source_system:
+        source_system = "charm" if is_charm else "unknown"
+
     # Patient matching for idempotent imports
     match_result: MatchResult | None = None
     if fhir_store and organization_id:
@@ -156,14 +166,36 @@ async def process_import(
                 r5_bundle, str(match_result.patient_id)
             )
 
-            # Add stable identifiers for idempotent imports
-            # This converts POST to conditional PUT so re-imports update existing resources
-            identifier_service = IdentifierService()
-            r5_bundle, id_warnings = add_identifiers_to_bundle(
-                r5_bundle, match_result.patient_id, identifier_service
+            # Tag resources with import source for selective re-import cleanup
+            r5_bundle = tag_bundle_for_import(
+                r5_bundle, source_system, match_result.patient_id
             )
-            # Add identifier service warnings to response for debugging
-            warnings.extend(id_warnings)
+
+            # Remove duplicates within the bundle
+            r5_bundle, dups_removed = remove_duplicate_resources(r5_bundle)
+            if dups_removed > 0:
+                warnings.append(
+                    f"Removed {dups_removed} duplicate resources from bundle"
+                )
+
+            # If patient already existed, delete their previous import-created resources
+            # This ensures re-imports cleanly replace previous data
+            if not match_result.patient_created:
+                deletion_result = await delete_imported_resources(
+                    fhir_store.client,
+                    match_result.patient_id,
+                    source_system,
+                    get_import_resource_types(),
+                )
+                if deletion_result.resources_deleted > 0:
+                    warnings.append(
+                        f"Deleted {deletion_result.resources_deleted} existing "
+                        f"import-created resources for re-import"
+                    )
+                if deletion_result.errors:
+                    warnings.extend(
+                        [f"Deletion warning: {e}" for e in deletion_result.errors]
+                    )
 
     # Persist to FHIR store if service is provided
     if fhir_store:
