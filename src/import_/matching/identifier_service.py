@@ -249,8 +249,7 @@ def add_identifiers_to_bundle(
             else:
                 logger.warning(
                     f"Encounter without actualPeriod: fullUrl={entry_fullurl}, "
-                    f"id={entry_id}, period={resource.get('period', {})}, "
-                    f"actualPeriod={resource.get('actualPeriod', {})}"
+                    f"id={entry_id}"
                 )
 
         elif resource_type == "Condition":
@@ -306,7 +305,9 @@ def add_identifiers_to_bundle(
                     duplicate_refs[entry_fullurl] = kept_fullurl
                 if resource.get("id"):
                     duplicate_refs[entry_id] = kept_fullurl
-                logger.info(f"Duplicate {resource_type}: {entry_id} -> {kept_fullurl}")
+                logger.warning(
+                    f"Duplicate {resource_type}: {entry_id} -> {kept_fullurl}"
+                )
             else:
                 entry_fullurl = entry.get("fullUrl", "")
                 identifier_to_fullurl[search_param] = entry_fullurl
@@ -326,15 +327,15 @@ def add_identifiers_to_bundle(
 
     # Remap references from duplicate resources to kept resources
     if duplicate_refs:
-        logger.info(f"Remapping references for {len(duplicate_refs)} duplicates")
+        logger.warning(f"Remapping references for {len(duplicate_refs)} duplicates")
         for old_ref, new_ref in duplicate_refs.items():
-            logger.info(f"  {old_ref} -> {new_ref}")
+            logger.warning(f"  {old_ref} -> {new_ref}")
         _remap_references(bundle, duplicate_refs)
 
     # Remove duplicate entries (marked earlier)
     duplicates_removed = sum(1 for e in bundle.get("entry", []) if e.get("_duplicate"))
     bundle["entry"] = [e for e in bundle.get("entry", []) if not e.get("_duplicate")]
-    logger.info(f"Removed {duplicates_removed} duplicate entries from bundle")
+    logger.warning(f"Removed {duplicates_removed} duplicate entries from bundle")
 
     return bundle
 
@@ -359,7 +360,7 @@ def _remap_refs_in_obj(obj: Any, ref_map: dict[str, str]) -> None:
         if "reference" in obj and isinstance(obj["reference"], str):
             old_ref = obj["reference"]
             if old_ref in ref_map:
-                logger.info(f"Remapping reference: {old_ref} -> {ref_map[old_ref]}")
+                logger.warning(f"Remapping reference: {old_ref} -> {ref_map[old_ref]}")
                 obj["reference"] = ref_map[old_ref]
         # Recurse into nested objects
         for value in obj.values():
