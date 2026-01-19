@@ -22,6 +22,10 @@ from src.import_.ccda_preprocessor import DoseRangeInfo, sanitize_ccda
 from src.import_.charm.composition_builder import build_compositions
 from src.import_.charm.extractor import CharmCcdaExtractor
 from src.import_.charm.linker import link_resources_to_encounters
+from src.import_.matching.identifier_service import (
+    IdentifierService,
+    add_identifiers_to_bundle,
+)
 from src.import_.matching.patient_matcher import (
     MatchResult,
     MatchStatus,
@@ -152,13 +156,12 @@ async def process_import(
                 r5_bundle, str(match_result.patient_id)
             )
 
-            # TODO: Re-enable after fixing reference resolution with conditional PUT
             # Add stable identifiers for idempotent imports
             # This converts POST to conditional PUT so re-imports update existing resources
-            # identifier_service = IdentifierService()
-            # r5_bundle = add_identifiers_to_bundle(
-            #     r5_bundle, match_result.patient_id, identifier_service
-            # )
+            identifier_service = IdentifierService()
+            r5_bundle = add_identifiers_to_bundle(
+                r5_bundle, match_result.patient_id, identifier_service
+            )
 
     # Persist to FHIR store if service is provided
     if fhir_store:

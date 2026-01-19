@@ -131,10 +131,14 @@ def _find_patient_reference(bundle: dict[str, Any]) -> str | None:
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
         if resource.get("resourceType") == "Patient":
+            # Prefer fullUrl for transaction bundle compatibility
+            # GCP FHIR API resolves urn:uuid references within transaction bundles
+            full_url: str | None = entry.get("fullUrl")
+            if full_url and full_url.startswith("urn:uuid:"):
+                return full_url
             patient_id = resource.get("id")
             if patient_id:
                 return f"Patient/{patient_id}"
-            full_url: str | None = entry.get("fullUrl")
             if full_url:
                 return full_url
     return None
@@ -145,10 +149,13 @@ def _find_practitioner_reference(bundle: dict[str, Any]) -> str | None:
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
         if resource.get("resourceType") == "Practitioner":
+            # Prefer fullUrl for transaction bundle compatibility
+            full_url: str | None = entry.get("fullUrl")
+            if full_url and full_url.startswith("urn:uuid:"):
+                return full_url
             pract_id = resource.get("id")
             if pract_id:
                 return f"Practitioner/{pract_id}"
-            full_url: str | None = entry.get("fullUrl")
             if full_url:
                 return full_url
     return None
@@ -159,10 +166,13 @@ def _find_organization_reference(bundle: dict[str, Any]) -> str | None:
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
         if resource.get("resourceType") == "Organization":
+            # Prefer fullUrl for transaction bundle compatibility
+            full_url: str | None = entry.get("fullUrl")
+            if full_url and full_url.startswith("urn:uuid:"):
+                return full_url
             org_id = resource.get("id")
             if org_id:
                 return f"Organization/{org_id}"
-            full_url: str | None = entry.get("fullUrl")
             if full_url:
                 return full_url
     return None
