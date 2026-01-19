@@ -119,6 +119,9 @@ async def process_import(
     r5_bundle, counts, transform_warnings = transform_bundle(r4_bundle)
     warnings.extend(transform_warnings)
 
+    # Inline medication concepts for UI compatibility
+    _inline_medication_concepts(r5_bundle)
+
     # Set organization on Patient resources
     if organization_id:
         _set_patient_organization(r5_bundle, organization_id)
@@ -585,6 +588,59 @@ def _update_patient_references(
         _replace_references(bundle, old_ref, new_patient_ref)
 
     return bundle
+
+
+def _inline_medication_concepts(bundle: dict[str, Any]) -> None:
+    """
+    Inline medication concepts from Medication resources into MedicationStatements.
+
+    The omnia UI displays medication.concept.text directly and doesn't resolve
+    medication.reference. This function copies the Medication's code into the
+    MedicationStatement's medication.concept field.
+    """
+    # Build a map of Medication resources by their references
+    medication_map: dict[str, dict[str, Any]] = {}
+    for entry in bundle.get("entry", []):
+        resource = entry.get("resource", {})
+        if resource.get("resourceType") == "Medication":
+            med_id = resource.get("id")
+            full_url = entry.get("fullUrl", "")
+            if med_id:
+                medication_map[f"Medication/{med_id}"] = resource
+            if full_url:
+                medication_map[full_url] = resource
+
+    # Update MedicationStatements to inline the medication concept
+    for entry in bundle.get("entry", []):
+        resource = entry.get("resource", {})
+        if resource.get("resourceType") == "MedicationStatement":
+            medication = resource.get("medication", {})
+            med_ref = medication.get("reference", {})
+
+            # Get the reference string (handle both nested and flat formats)
+            ref_str = None
+            if isinstance(med_ref, dict):
+                ref_str = med_ref.get("reference")
+            elif isinstance(med_ref, str):
+                ref_str = med_ref
+
+            if ref_str and ref_str in medication_map:
+                med_resource = medication_map[ref_str]
+                med_code = med_resource.get("code", {})
+
+                # Add concept with the medication name
+                if med_code:
+                    # Get display text from coding or use text field
+                    display_text = med_code.get("text")
+                    if not display_text:
+                        codings = med_code.get("coding", [])
+                        if codings:
+                            display_text = codings[0].get("display")
+
+                    medication["concept"] = {
+                        "coding": med_code.get("coding", []),
+                        "text": display_text,
+                    }
 
 
 def _replace_references(obj: Any, old_ref: str, new_ref: str) -> None:
