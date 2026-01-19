@@ -159,9 +159,11 @@ async def process_import(
             # Add stable identifiers for idempotent imports
             # This converts POST to conditional PUT so re-imports update existing resources
             identifier_service = IdentifierService()
-            r5_bundle = add_identifiers_to_bundle(
+            r5_bundle, id_warnings = add_identifiers_to_bundle(
                 r5_bundle, match_result.patient_id, identifier_service
             )
+            # Add identifier service warnings to response for debugging
+            warnings.extend(id_warnings)
 
     # Persist to FHIR store if service is provided
     if fhir_store:

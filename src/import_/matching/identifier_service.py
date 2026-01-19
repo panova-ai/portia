@@ -204,7 +204,7 @@ def add_identifiers_to_bundle(
     bundle: dict[str, Any],
     patient_id: UUID,
     identifier_service: IdentifierService,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], list[str]]:
     """
     Add stable identifiers to all resources in a bundle.
 
@@ -217,8 +217,16 @@ def add_identifiers_to_bundle(
         identifier_service: Service for generating identifiers
 
     Returns:
-        Modified bundle with identifiers and conditional requests
+        Tuple of (modified bundle, warnings list)
     """
+    id_warnings: list[str] = []
+
+    # Log initial state - find ALL Encounter references BEFORE any processing
+    initial_enc_refs = _find_all_encounter_refs(bundle)
+    id_warnings.append(f"INITIAL: Found {len(initial_enc_refs)} Encounter refs")
+    for ref_info in initial_enc_refs[:10]:  # First 10
+        id_warnings.append(f"  INITIAL REF: {ref_info}")
+
     # Change bundle type to transaction for conditional operations
     bundle["type"] = "transaction"
 
@@ -240,20 +248,29 @@ def add_identifiers_to_bundle(
 
         if resource_type == "Encounter":
             encounter_count += 1
+            id_warnings.append(
+                f"Encounter #{encounter_count}: id={resource_id}, fullUrl={entry_fullurl[:50]}"
+            )
             if not resource_id or not entry_fullurl:
-                logger.warning(
-                    f"Encounter #{encounter_count} missing id or fullUrl: "
-                    f"id={resource_id}, fullUrl={entry_fullurl}"
+                id_warnings.append(
+                    f"  WARNING: Encounter #{encounter_count} missing id or fullUrl!"
                 )
 
         if resource_type and resource_id and entry_fullurl:
             # Map "ResourceType/id" -> fullUrl for reference normalization
             id_to_fullurl[f"{resource_type}/{resource_id}"] = entry_fullurl
 
-    logger.warning(
+    id_warnings.append(
         f"Collected {len(id_to_fullurl)} id->fullUrl mappings, "
         f"{sum(1 for k in id_to_fullurl if k.startswith('Encounter/'))} are Encounters"
     )
+
+    # Log sample Encounter mappings
+    enc_mappings = [
+        (k, v) for k, v in id_to_fullurl.items() if k.startswith("Encounter/")
+    ]
+    for k, v in enc_mappings[:3]:
+        id_warnings.append(f"  Mapping: {k} -> {v[:50]}")
 
     # Second pass: process identifiers and mark duplicates
     for entry in bundle.get("entry", []):
@@ -367,24 +384,43 @@ def add_identifiers_to_bundle(
     # Then add duplicate refs (overrides if needed)
     ref_map.update(duplicate_refs)
 
+    # Log ref_map details
+    enc_ref_map = {k: v for k, v in ref_map.items() if "Encounter" in k}
+    id_warnings.append(
+        f"ref_map has {len(ref_map)} total, {len(enc_ref_map)} Encounter mappings"
+    )
+    for k, v in list(enc_ref_map.items())[:5]:
+        id_warnings.append(f"  ref_map: {k} -> {v[:50]}")
+
+    # Find refs BEFORE remapping
+    pre_remap_refs = _find_all_encounter_refs(bundle)
+    id_warnings.append(f"PRE-REMAP: {len(pre_remap_refs)} Encounter refs")
+    for ref_info in pre_remap_refs[:10]:
+        id_warnings.append(f"  PRE-REMAP: {ref_info}")
+
     # Remap references to normalize all to fullUrl format
     if ref_map:
-        logger.warning(f"Remapping {len(ref_map)} references")
-        _remap_references(bundle, ref_map)
+        id_warnings.append(f"Remapping {len(ref_map)} references")
+        _remap_references(bundle, ref_map, id_warnings)
+
+    # Find refs AFTER remapping
+    post_remap_refs = _find_all_encounter_refs(bundle)
+    id_warnings.append(f"POST-REMAP: {len(post_remap_refs)} Encounter refs")
+    for ref_info in post_remap_refs[:10]:
+        id_warnings.append(f"  POST-REMAP: {ref_info}")
 
     # Remove duplicate entries (marked earlier)
     duplicates_removed = sum(1 for e in bundle.get("entry", []) if e.get("_duplicate"))
     bundle["entry"] = [e for e in bundle.get("entry", []) if not e.get("_duplicate")]
-    logger.warning(f"Removed {duplicates_removed} duplicate entries from bundle")
+    id_warnings.append(f"Removed {duplicates_removed} duplicate entries from bundle")
 
-    # Check for unrewritten Encounter references
+    # Check for unrewritten Encounter references (ResourceType/id format)
     unrewritten = _find_unrewritten_refs(bundle, "Encounter/")
-    if unrewritten:
-        logger.warning(
-            f"Found {len(unrewritten)} unrewritten Encounter/ refs: {unrewritten[:5]}"
-        )
+    id_warnings.append(f"UNREWRITTEN: {len(unrewritten)} Encounter/ refs remaining")
+    for ref_info in unrewritten[:20]:  # Show more to find the problem
+        id_warnings.append(f"  UNREWRITTEN: {ref_info}")
 
-    # Log final resource counts and verify kept Encounter exists
+    # Log final resource counts
     resource_counts: dict[str, int] = {}
     encounter_fullurls: list[str] = []
     for entry in bundle.get("entry", []):
@@ -393,38 +429,93 @@ def add_identifiers_to_bundle(
         resource_counts[rtype] = resource_counts.get(rtype, 0) + 1
         if rtype == "Encounter":
             encounter_fullurls.append(entry.get("fullUrl", "NO_FULLURL"))
-    logger.warning(f"Final bundle: {resource_counts}")
-    logger.warning(f"Sample Encounter fullUrls: {encounter_fullurls[:3]}")
+    id_warnings.append(f"Final bundle: {resource_counts}")
+    id_warnings.append(f"Sample Encounter fullUrls: {encounter_fullurls[:3]}")
 
-    return bundle
+    # Final check - find ALL Encounter refs in final bundle
+    final_refs = _find_all_encounter_refs(bundle)
+    id_warnings.append(f"FINAL: {len(final_refs)} total Encounter refs")
+    # Count how many are urn:uuid vs Encounter/
+    urn_refs = [r for r in final_refs if "urn:uuid" in r]
+    enc_id_refs = [r for r in final_refs if "Encounter/" in r and "urn:uuid" not in r]
+    id_warnings.append(
+        f"  urn:uuid refs: {len(urn_refs)}, Encounter/ refs: {len(enc_id_refs)}"
+    )
+    for ref_info in enc_id_refs[:10]:
+        id_warnings.append(f"  BAD REF: {ref_info}")
+
+    return bundle, id_warnings
 
 
-def _remap_references(bundle: dict[str, Any], ref_map: dict[str, str]) -> None:
+def _find_all_encounter_refs(bundle: dict[str, Any]) -> list[str]:
+    """Find ALL Encounter references in the bundle with context."""
+    refs: list[str] = []
+    for entry in bundle.get("entry", []):
+        resource = entry.get("resource", {})
+        resource_type = resource.get("resourceType", "Unknown")
+        resource_id = resource.get("id", "no-id")
+        _collect_encounter_refs(resource, f"{resource_type}/{resource_id}", refs)
+    return refs
+
+
+def _collect_encounter_refs(obj: Any, context: str, refs: list[str]) -> None:
+    """Recursively collect ALL Encounter references with context."""
+    if isinstance(obj, dict):
+        if "reference" in obj:
+            ref_value = obj["reference"]
+            if isinstance(ref_value, str) and (
+                "Encounter" in ref_value or "urn:uuid" in ref_value
+            ):
+                # Check if it looks like an Encounter ref
+                refs.append(f"{ref_value} in {context}")
+            elif isinstance(ref_value, dict) and "reference" in ref_value:
+                nested = ref_value["reference"]
+                if isinstance(nested, str) and (
+                    "Encounter" in nested or "urn:uuid" in nested
+                ):
+                    refs.append(f"{nested} (nested) in {context}")
+        for key, value in obj.items():
+            _collect_encounter_refs(value, f"{context}.{key}", refs)
+    elif isinstance(obj, list):
+        for i, item in enumerate(obj):
+            _collect_encounter_refs(item, f"{context}[{i}]", refs)
+
+
+def _remap_references(
+    bundle: dict[str, Any], ref_map: dict[str, str], warnings: list[str]
+) -> None:
     """
     Update all references in the bundle using the reference map.
 
     Args:
         bundle: The FHIR bundle to update
         ref_map: Map of old reference -> new reference
+        warnings: List to append warning messages to
     """
-    # Log Encounter mappings specifically
-    encounter_mappings = {k: v for k, v in ref_map.items() if "Encounter" in k}
-    logger.warning(f"Encounter mappings in ref_map: {len(encounter_mappings)}")
-    for k, v in list(encounter_mappings.items())[:5]:
-        logger.warning(f"  {k} -> {v}")
-
+    remap_count = 0
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
-        _remap_refs_in_obj(resource, ref_map)
+        resource_type = resource.get("resourceType", "Unknown")
+        resource_id = resource.get("id", "no-id")
+        count = _remap_refs_in_obj(
+            resource, ref_map, f"{resource_type}/{resource_id}", warnings
+        )
+        remap_count += count
+    warnings.append(f"Remapped {remap_count} references total")
 
 
-def _remap_refs_in_obj(obj: Any, ref_map: dict[str, str]) -> None:
+def _remap_refs_in_obj(
+    obj: Any, ref_map: dict[str, str], context: str, warnings: list[str]
+) -> int:
     """Recursively update references in a FHIR object.
 
     Handles both simple Reference and R5 CodeableReference structures:
     - Simple: {"reference": "Encounter/xxx"}
     - CodeableReference: {"reference": {"reference": "Encounter/xxx"}}
+
+    Returns count of remapped references.
     """
+    count = 0
     if isinstance(obj, dict):
         # Check if this is a Reference (simple or nested)
         if "reference" in obj:
@@ -432,24 +523,35 @@ def _remap_refs_in_obj(obj: Any, ref_map: dict[str, str]) -> None:
             if isinstance(ref_value, str):
                 # Simple Reference: {"reference": "Encounter/xxx"}
                 if ref_value in ref_map:
-                    logger.warning(
-                        f"Remapping reference: {ref_value} -> {ref_map[ref_value]}"
+                    warnings.append(
+                        f"  REMAP: {ref_value} -> {ref_map[ref_value][:40]} in {context}"
                     )
                     obj["reference"] = ref_map[ref_value]
+                    count += 1
+                elif ref_value.startswith("Encounter/"):
+                    # This is an Encounter ref that's NOT in the map!
+                    warnings.append(f"  NOT IN MAP: {ref_value} in {context}")
             elif isinstance(ref_value, dict) and "reference" in ref_value:
                 # Nested CodeableReference: {"reference": {"reference": "Encounter/xxx"}}
                 nested_ref = ref_value["reference"]
                 if isinstance(nested_ref, str) and nested_ref in ref_map:
-                    logger.warning(
-                        f"Remapping nested reference: {nested_ref} -> {ref_map[nested_ref]}"
+                    warnings.append(
+                        f"  REMAP NESTED: {nested_ref} -> {ref_map[nested_ref][:40]} in {context}"
                     )
                     ref_value["reference"] = ref_map[nested_ref]
+                    count += 1
+                elif isinstance(nested_ref, str) and nested_ref.startswith(
+                    "Encounter/"
+                ):
+                    # This is an Encounter ref that's NOT in the map!
+                    warnings.append(f"  NOT IN MAP (nested): {nested_ref} in {context}")
         # Recurse into nested objects
-        for value in obj.values():
-            _remap_refs_in_obj(value, ref_map)
+        for key, value in obj.items():
+            count += _remap_refs_in_obj(value, ref_map, f"{context}.{key}", warnings)
     elif isinstance(obj, list):
-        for item in obj:
-            _remap_refs_in_obj(item, ref_map)
+        for i, item in enumerate(obj):
+            count += _remap_refs_in_obj(item, ref_map, f"{context}[{i}]", warnings)
+    return count
 
 
 def _find_unrewritten_refs(bundle: dict[str, Any], prefix: str) -> list[str]:
