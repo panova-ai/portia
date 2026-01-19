@@ -191,15 +191,23 @@ class FHIRStoreService:
             if organization_id:
                 resource = self._add_organization_tag(resource, organization_id)
 
-            # For resources with urn:uuid fullUrl, use POST to let server assign IDs
-            # This is more compatible with GCP Healthcare API's reference resolution
             full_url = entry.get("fullUrl", "")
-            use_post = full_url.startswith("urn:uuid:")
 
-            # Create transaction entry
-            transaction_entry: dict[str, Any] = {
-                "resource": resource,
-                "request": {
+            # Use existing request if present (for conditional PUT from identifier service)
+            # Otherwise, construct a default request
+            existing_request = entry.get("request")
+            if (
+                existing_request
+                and existing_request.get("method")
+                and existing_request.get("url")
+            ):
+                request = existing_request
+            else:
+                # For resources with urn:uuid fullUrl, use POST to let server assign IDs
+                # This is more compatible with GCP Healthcare API's reference resolution
+                use_post = full_url.startswith("urn:uuid:")
+
+                request = {
                     "method": (
                         "POST" if use_post else ("PUT" if resource_id else "POST")
                     ),
@@ -212,7 +220,12 @@ class FHIRStoreService:
                             else resource_type
                         )
                     ),
-                },
+                }
+
+            # Create transaction entry
+            transaction_entry: dict[str, Any] = {
+                "resource": resource,
+                "request": request,
             }
 
             # Preserve fullUrl for ID mapping (required for local reference resolution)
