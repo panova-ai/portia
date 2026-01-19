@@ -26,6 +26,7 @@ class DoseRangeInfo:
     low: float
     high: float
     unit: str | None = None
+    medication_code: str | None = None  # RxNorm or other code to match medication
 
 
 # Elements with 'value' attributes that must be numeric
@@ -101,7 +102,7 @@ def _fix_numeric_value_attributes(
     this function:
     1. Detects non-numeric values like "1-2"
     2. Uses average for MS Converter compatibility
-    3. Records original range for FHIR post-processing
+    3. Records original range with medication code for FHIR post-processing
     4. Falls back to nullFlavor="NI" if no number can be extracted
 
     Returns:
@@ -109,6 +110,9 @@ def _fix_numeric_value_attributes(
     """
     warnings: list[str] = []
     dose_ranges: list[DoseRangeInfo] = []
+
+    # Build parent map for navigation
+    parent_map = {child: parent for parent in root.iter() for child in parent}
 
     for element_name in NUMERIC_VALUE_ELEMENTS:
         # Search with and without namespace
@@ -135,10 +139,17 @@ def _fix_numeric_value_attributes(
                         # Get unit if available
                         unit = elem.get("unit")
 
-                        # Record the range for FHIR post-processing
+                        # Extract medication code for matching in FHIR post-processing
+                        medication_code = None
                         if element_name == "doseQuantity":
+                            medication_code = _find_medication_code(elem, parent_map)
                             dose_ranges.append(
-                                DoseRangeInfo(low=low, high=high, unit=unit)
+                                DoseRangeInfo(
+                                    low=low,
+                                    high=high,
+                                    unit=unit,
+                                    medication_code=medication_code,
+                                )
                             )
 
                         warnings.append(
@@ -166,3 +177,42 @@ def _fix_numeric_value_attributes(
                             )
 
     return warnings, dose_ranges
+
+
+def _find_medication_code(
+    dose_elem: ET.Element, parent_map: dict[ET.Element, ET.Element]
+) -> str | None:
+    """
+    Find the medication code (RxNorm) for a doseQuantity element.
+
+    Navigates up to substanceAdministration and down to
+    consumable/manufacturedProduct/manufacturedMaterial/code.
+    """
+    # Navigate up to find substanceAdministration
+    current = dose_elem
+    substance_admin = None
+
+    while current in parent_map:
+        current = parent_map[current]
+        local_name = current.tag.split("}")[-1] if "}" in current.tag else current.tag
+        if local_name == "substanceAdministration":
+            substance_admin = current
+            break
+
+    if substance_admin is None:
+        return None
+
+    # Navigate down to find the medication code
+    # Path: consumable/manufacturedProduct/manufacturedMaterial/code
+    for consumable in substance_admin:
+        if consumable.tag.endswith("consumable"):
+            for mfg_product in consumable:
+                if mfg_product.tag.endswith("manufacturedProduct"):
+                    for mfg_material in mfg_product:
+                        if mfg_material.tag.endswith("manufacturedMaterial"):
+                            for code_elem in mfg_material:
+                                if code_elem.tag.endswith("code"):
+                                    code_value: str | None = code_elem.get("code")
+                                    return code_value
+
+    return None

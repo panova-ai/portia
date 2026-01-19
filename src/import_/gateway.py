@@ -665,6 +665,9 @@ def _convert_dose_quantities_to_ranges(
     handle single numeric values. We sanitize to the average for conversion,
     then post-process to restore the proper doseRange structure.
 
+    Matching is done by medication code (RxNorm) to ensure we convert the
+    correct medications, not ones that happen to have the same average dose.
+
     Args:
         bundle: The FHIR bundle to modify
         dose_ranges: List of DoseRangeInfo from C-CDA sanitization
@@ -672,42 +675,110 @@ def _convert_dose_quantities_to_ranges(
     if not dose_ranges:
         return
 
-    # Process each MedicationStatement and convert matching dose quantities
-    range_idx = 0
+    # Build a map of medication codes to their range info
+    # Track how many times we've used each code (for duplicates)
+    ranges_by_code: dict[str, list[DoseRangeInfo]] = {}
+    for dr in dose_ranges:
+        if dr.medication_code:
+            if dr.medication_code not in ranges_by_code:
+                ranges_by_code[dr.medication_code] = []
+            ranges_by_code[dr.medication_code].append(dr)
+
+    # Track which ranges we've used
+    used_ranges: set[int] = set()
+
+    # Process each MedicationStatement
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
         if resource.get("resourceType") != "MedicationStatement":
             continue
 
+        # Get medication code from the MedicationStatement
+        med_code = _get_medication_code_from_statement(resource, bundle)
+        if not med_code or med_code not in ranges_by_code:
+            continue
+
+        # Find an unused range for this medication code
+        range_info: DoseRangeInfo | None = None
+        for ri in ranges_by_code[med_code]:
+            range_key = id(ri)
+            if range_key not in used_ranges:
+                range_info = ri
+                used_ranges.add(range_key)
+                break
+
+        if range_info is None:
+            continue
+
+        # Convert doseQuantity to doseRange
         dosages = resource.get("dosage", [])
         for dosage in dosages:
             dose_and_rate_list = dosage.get("doseAndRate", [])
             for dose_and_rate in dose_and_rate_list:
                 dose_quantity = dose_and_rate.get("doseQuantity")
 
-                if dose_quantity and range_idx < len(dose_ranges):
-                    range_info = dose_ranges[range_idx]
+                if dose_quantity:
+                    # Convert to doseRange
+                    unit = dose_quantity.get("unit") or range_info.unit
 
-                    # Check if this quantity's value matches what we expect
-                    # (the average we set during sanitization)
-                    current_value = dose_quantity.get("value")
-                    expected_avg = (range_info.low + range_info.high) / 2
+                    dose_and_rate["doseRange"] = {
+                        "low": {"value": range_info.low},
+                        "high": {"value": range_info.high},
+                    }
+                    if unit:
+                        dose_and_rate["doseRange"]["low"]["unit"] = unit
+                        dose_and_rate["doseRange"]["high"]["unit"] = unit
 
-                    # Allow small floating point differences
-                    if (
-                        current_value is not None
-                        and abs(float(current_value) - expected_avg) < 0.01
-                    ):
-                        # Convert to doseRange
-                        unit = dose_quantity.get("unit") or range_info.unit
+                    # Remove the doseQuantity
+                    del dose_and_rate["doseQuantity"]
+                    break  # Only convert once per MedicationStatement
 
-                        dose_and_rate["doseRange"] = {
-                            "low": {"value": range_info.low, "unit": unit},
-                            "high": {"value": range_info.high, "unit": unit},
-                        }
-                        # Remove the doseQuantity
-                        del dose_and_rate["doseQuantity"]
-                        range_idx += 1
+
+def _get_medication_code_from_statement(
+    med_statement: dict[str, Any], bundle: dict[str, Any]
+) -> str | None:
+    """
+    Extract the medication code (RxNorm) from a MedicationStatement.
+
+    The code can be inline in medication.concept or referenced via medication.reference.
+    """
+    medication = med_statement.get("medication", {})
+
+    # Check inline concept first
+    concept = medication.get("concept", {})
+    for coding in concept.get("coding", []):
+        code: str | None = coding.get("code")
+        if code:
+            return code
+
+    # Check reference to Medication resource
+    reference = medication.get("reference", {})
+    ref_str = reference.get("reference") if isinstance(reference, dict) else reference
+
+    if ref_str:
+        # Find the referenced Medication in the bundle
+        for entry in bundle.get("entry", []):
+            resource = entry.get("resource", {})
+            if resource.get("resourceType") != "Medication":
+                continue
+
+            # Check if this is the referenced medication
+            med_id = resource.get("id")
+            full_url = entry.get("fullUrl", "")
+
+            if (
+                ref_str == f"Medication/{med_id}"
+                or ref_str == full_url
+                or (med_id and ref_str.endswith(med_id))
+            ):
+                # Extract code from Medication resource
+                med_resource_code = resource.get("code", {})
+                for coding in med_resource_code.get("coding", []):
+                    med_code: str | None = coding.get("code")
+                    if med_code:
+                        return med_code
+
+    return None
 
 
 def _filter_nkda_allergies(bundle: dict[str, Any]) -> int:
