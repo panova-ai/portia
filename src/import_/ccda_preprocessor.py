@@ -12,7 +12,9 @@ Known issues handled:
 
 import re
 from dataclasses import dataclass
-from xml.etree import ElementTree as ET
+from xml.etree.ElementTree import Element, register_namespace, tostring
+
+from defusedxml.ElementTree import ParseError, fromstring
 
 # C-CDA namespace
 CDA_NS = "urn:hl7-org:v3"
@@ -66,9 +68,9 @@ def sanitize_ccda(content: str) -> tuple[str, list[str], list[DoseRangeInfo]]:
 
     try:
         # Register namespace to preserve it in output
-        ET.register_namespace("", CDA_NS)
+        register_namespace("", CDA_NS)
 
-        root = ET.fromstring(content)
+        root = fromstring(content)
 
         # Fix numeric value attributes
         fixes, ranges = _fix_numeric_value_attributes(root)
@@ -76,7 +78,7 @@ def sanitize_ccda(content: str) -> tuple[str, list[str], list[DoseRangeInfo]]:
         dose_ranges.extend(ranges)
 
         # Convert back to string
-        sanitized = ET.tostring(root, encoding="unicode")
+        sanitized = tostring(root, encoding="unicode")
 
         # Restore XML declaration if present in original
         if content.strip().startswith("<?xml"):
@@ -87,13 +89,13 @@ def sanitize_ccda(content: str) -> tuple[str, list[str], list[DoseRangeInfo]]:
 
         return sanitized, warnings, dose_ranges
 
-    except ET.ParseError as e:
+    except ParseError as e:
         # If XML parsing fails, return original content with warning
         return content, [f"XML parsing failed, skipping sanitization: {e}"], []
 
 
 def _fix_numeric_value_attributes(
-    root: ET.Element,
+    root: Element,
 ) -> tuple[list[str], list[DoseRangeInfo]]:
     """
     Find and fix elements with non-numeric 'value' attributes.
@@ -180,7 +182,7 @@ def _fix_numeric_value_attributes(
 
 
 def _find_medication_code(
-    dose_elem: ET.Element, parent_map: dict[ET.Element, ET.Element]
+    dose_elem: Element, parent_map: dict[Element, Element]
 ) -> str | None:
     """
     Find the medication code (RxNorm) for a doseQuantity element.
