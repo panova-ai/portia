@@ -132,9 +132,13 @@ class FHIRStoreService:
                         severity = issue.get("severity", "error")
                         diagnostics = issue.get("diagnostics", "")
                         details = issue.get("details", {}).get("text", "")
+                        expression = issue.get("expression", [])
+                        location = ", ".join(expression) if expression else ""
                         error_msg = (
                             f"{severity}: {diagnostics or details or 'Unknown error'}"
                         )
+                        if location:
+                            error_msg = f"{error_msg} at {location}"
                         error_details.append(error_msg)
                         logger.error("FHIR error: %s", error_msg)
                 else:

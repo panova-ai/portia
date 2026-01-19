@@ -57,8 +57,9 @@ def transform_encounter(r4_encounter: dict[str, Any]) -> dict[str, Any]:
 
         # Convert reasonReference entries
         # R4: reasonReference is array of Reference objects [{"reference": "..."}]
+        # R5: reason.value is CodeableReference[] with structure [{"reference": Reference}]
         for reason_ref in r5_encounter.pop("reasonReference", []):
-            reasons.append({"value": [reason_ref]})
+            reasons.append({"value": [{"reference": reason_ref}]})
 
         if reasons:
             r5_encounter["reason"] = reasons
@@ -70,9 +71,9 @@ def transform_encounter(r4_encounter: dict[str, Any]) -> dict[str, Any]:
             r5_diag = diag.copy()
             # 'condition' in R4 becomes part of 'condition' array in R5
             # R4: condition is a single Reference {"reference": "..."}
-            # R5: condition is an array of References [{"reference": "..."}]
+            # R5: condition is CodeableReference[] with structure [{"reference": Reference}]
             if "condition" in r5_diag:
-                r5_diag["condition"] = [r5_diag["condition"]]
+                r5_diag["condition"] = [{"reference": r5_diag["condition"]}]
             # 'use' stays the same
             r5_diagnoses.append(r5_diag)
         r5_encounter["diagnosis"] = r5_diagnoses
