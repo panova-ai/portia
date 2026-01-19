@@ -133,6 +133,11 @@ async def process_import(
     if dose_ranges:
         _convert_dose_quantities_to_ranges(r5_bundle, dose_ranges)
 
+    # Ensure all resources have urn:uuid fullUrls and remap references
+    # This is critical for GCP FHIR transaction bundle reference resolution
+    remap_warnings = _ensure_all_fullurls_and_remap_references(r5_bundle)
+    warnings.extend(remap_warnings)
+
     # Inline medication concepts for UI compatibility
     _inline_medication_concepts(r5_bundle)
 
@@ -459,6 +464,85 @@ def _ensure_patient_fullurl(bundle: dict[str, Any]) -> None:
                 if not resource.get("id"):
                     resource["id"] = patient_id
                 entry["fullUrl"] = f"urn:uuid:{patient_id}"
+
+
+def _ensure_all_fullurls_and_remap_references(bundle: dict[str, Any]) -> list[str]:
+    """Ensure all resources have urn:uuid fullUrls and update all references.
+
+    GCP Healthcare FHIR API requires urn:uuid format for reference resolution
+    within transaction bundles. This function:
+    1. Assigns urn:uuid fullUrls to all resources that don't have them
+    2. Builds a mapping from ResourceType/id to urn:uuid
+    3. Updates all references in the bundle to use urn:uuid format
+
+    Args:
+        bundle: The FHIR bundle to process
+
+    Returns:
+        List of warnings
+    """
+    warnings: list[str] = []
+
+    # Step 1: Build mapping and ensure all resources have urn:uuid fullUrls
+    ref_map: dict[str, str] = {}
+
+    for entry in bundle.get("entry", []):
+        resource = entry.get("resource", {})
+        resource_type = resource.get("resourceType")
+        resource_id = resource.get("id")
+
+        if not resource_type:
+            continue
+
+        # Ensure resource has an id
+        if not resource_id:
+            resource_id = str(uuid4())
+            resource["id"] = resource_id
+
+        # Build the standard reference format
+        standard_ref = f"{resource_type}/{resource_id}"
+
+        # Check current fullUrl
+        full_url = entry.get("fullUrl")
+
+        # Ensure fullUrl is in urn:uuid format
+        if not full_url or not full_url.startswith("urn:uuid:"):
+            full_url = f"urn:uuid:{resource_id}"
+            entry["fullUrl"] = full_url
+
+        # Map both ResourceType/id and the old fullUrl to the new urn:uuid
+        ref_map[standard_ref] = full_url
+        if entry.get("fullUrl") and entry["fullUrl"] != full_url:
+            # Also map the original fullUrl if different
+            ref_map[entry["fullUrl"]] = full_url
+
+    # Step 2: Update all references in the bundle to use urn:uuid format
+    remapped_count = 0
+
+    def remap_reference(obj: Any) -> None:
+        """Recursively remap references to urn:uuid format."""
+        nonlocal remapped_count
+        if isinstance(obj, dict):
+            if "reference" in obj:
+                ref_val = obj["reference"]
+                if isinstance(ref_val, str) and ref_val in ref_map:
+                    obj["reference"] = ref_map[ref_val]
+                    remapped_count += 1
+            # Recurse into all dict values
+            for value in obj.values():
+                remap_reference(value)
+        elif isinstance(obj, list):
+            for item in obj:
+                remap_reference(item)
+
+    for entry in bundle.get("entry", []):
+        resource = entry.get("resource", {})
+        remap_reference(resource)
+
+    if remapped_count > 0:
+        warnings.append(f"Remapped {remapped_count} references to urn:uuid format")
+
+    return warnings
 
 
 async def _match_patient(
