@@ -239,9 +239,6 @@ def add_identifiers_to_bundle(
                 identifier = identifier_service.encounter_identifier(
                     patient_id, enc_date
                 )
-                # Skip if we already assigned this identifier to another Encounter
-                if identifier and identifier.to_search_param() in assigned_identifiers:
-                    identifier = None
 
         elif resource_type == "Condition":
             # Extract code and onset
@@ -282,14 +279,18 @@ def add_identifiers_to_bundle(
                     patient_id, code, eff_date
                 )
 
-        # Add identifier and conditional request
+        # Add identifier and conditional request (skip duplicates)
         if identifier:
-            # Track to avoid duplicates in the same bundle
-            assigned_identifiers.add(identifier.to_search_param())
-            identifier_service.add_identifier_to_resource(resource, identifier)
-            entry["request"] = identifier_service.create_conditional_request(
-                resource_type, identifier
-            )
+            search_param = identifier.to_search_param()
+            if search_param in assigned_identifiers:
+                # Skip - another resource already has this identifier
+                identifier = None
+            else:
+                assigned_identifiers.add(search_param)
+                identifier_service.add_identifier_to_resource(resource, identifier)
+                entry["request"] = identifier_service.create_conditional_request(
+                    resource_type, identifier
+                )
 
         # Update subject reference to use matched patient
         # Note: In R5, some resources like Composition have subject as an array
