@@ -219,9 +219,11 @@ def add_identifiers_to_bundle(
     # Change bundle type to transaction for conditional operations
     bundle["type"] = "transaction"
 
-    # Track assigned identifiers to avoid duplicates in the same bundle
-    # (e.g., MS Converter and CHARM both create Encounters for same date)
-    assigned_identifiers: set[str] = set()
+    # Track assigned identifiers and their fullUrls to handle duplicates
+    # Maps identifier search param -> fullUrl of the kept entry
+    identifier_to_fullurl: dict[str, str] = {}
+    # Maps duplicate fullUrl/ID -> kept fullUrl (for reference remapping)
+    duplicate_refs: dict[str, str] = {}
 
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
@@ -282,11 +284,20 @@ def add_identifiers_to_bundle(
         # Add identifier and conditional request (mark duplicates for removal)
         if identifier:
             search_param = identifier.to_search_param()
-            if search_param in assigned_identifiers:
+            if search_param in identifier_to_fullurl:
                 # Mark for removal - another resource already has this identifier
                 entry["_duplicate"] = True
+                # Record reference mapping for this duplicate
+                entry_fullurl = entry.get("fullUrl", "")
+                entry_id = f"{resource_type}/{resource.get('id', '')}"
+                kept_fullurl = identifier_to_fullurl[search_param]
+                if entry_fullurl:
+                    duplicate_refs[entry_fullurl] = kept_fullurl
+                if resource.get("id"):
+                    duplicate_refs[entry_id] = kept_fullurl
             else:
-                assigned_identifiers.add(search_param)
+                entry_fullurl = entry.get("fullUrl", "")
+                identifier_to_fullurl[search_param] = entry_fullurl
                 identifier_service.add_identifier_to_resource(resource, identifier)
                 entry["request"] = identifier_service.create_conditional_request(
                     resource_type, identifier
@@ -301,10 +312,43 @@ def add_identifiers_to_bundle(
             else:
                 resource["subject"] = subject_ref
 
+    # Remap references from duplicate resources to kept resources
+    if duplicate_refs:
+        _remap_references(bundle, duplicate_refs)
+
     # Remove duplicate entries (marked earlier)
     bundle["entry"] = [e for e in bundle.get("entry", []) if not e.get("_duplicate")]
 
     return bundle
+
+
+def _remap_references(bundle: dict[str, Any], ref_map: dict[str, str]) -> None:
+    """
+    Update all references in the bundle using the reference map.
+
+    Args:
+        bundle: The FHIR bundle to update
+        ref_map: Map of old reference -> new reference
+    """
+    for entry in bundle.get("entry", []):
+        resource = entry.get("resource", {})
+        _remap_refs_in_obj(resource, ref_map)
+
+
+def _remap_refs_in_obj(obj: Any, ref_map: dict[str, str]) -> None:
+    """Recursively update references in a FHIR object."""
+    if isinstance(obj, dict):
+        # Check if this is a Reference
+        if "reference" in obj and isinstance(obj["reference"], str):
+            old_ref = obj["reference"]
+            if old_ref in ref_map:
+                obj["reference"] = ref_map[old_ref]
+        # Recurse into nested objects
+        for value in obj.values():
+            _remap_refs_in_obj(value, ref_map)
+    elif isinstance(obj, list):
+        for item in obj:
+            _remap_refs_in_obj(item, ref_map)
 
 
 def _extract_date(value: str | None) -> date | None:
