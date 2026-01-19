@@ -457,7 +457,13 @@ def _find_unrewritten_refs(bundle: dict[str, Any], prefix: str) -> list[str]:
     refs: list[str] = []
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
-        _collect_refs(resource, prefix, refs)
+        resource_type = resource.get("resourceType", "Unknown")
+        resource_id = resource.get("id", "no-id")
+        # Track which resource contains the bad reference
+        found_in_resource: list[str] = []
+        _collect_refs(resource, prefix, found_in_resource)
+        for ref in found_in_resource:
+            refs.append(f"{ref} (in {resource_type}/{resource_id})")
     return refs
 
 
