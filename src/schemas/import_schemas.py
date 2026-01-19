@@ -4,7 +4,12 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# Maximum size for imported data (10MB decoded, ~13.3MB base64-encoded)
+# Typical C-CDA documents are 100KB-2MB
+MAX_IMPORT_SIZE_BYTES = 10 * 1024 * 1024  # 10MB
+MAX_BASE64_SIZE = int(MAX_IMPORT_SIZE_BYTES * 4 / 3) + 100  # base64 overhead + padding
 
 
 class ImportFormat(str, Enum):
@@ -51,6 +56,18 @@ class ImportRequest(BaseModel):
 
     format: ImportFormat = Field(description="Format of the input data")
     data: str = Field(description="Base64-encoded input data")
+
+    @field_validator("data")
+    @classmethod
+    def validate_data_size(cls, v: str) -> str:
+        """Validate that the data field doesn't exceed the maximum size."""
+        if len(v) > MAX_BASE64_SIZE:
+            max_mb = MAX_IMPORT_SIZE_BYTES / (1024 * 1024)
+            raise ValueError(
+                f"Import data exceeds maximum size of {max_mb:.0f}MB. "
+                "Please split large documents or contact support."
+            )
+        return v
 
     # Context - defaults to current user's context if not provided
     organization_id: UUID | None = Field(
