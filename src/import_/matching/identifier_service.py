@@ -283,8 +283,13 @@ def add_identifiers_to_bundle(
             )
 
         # Update subject reference to use matched patient
+        # Note: In R5, some resources like Composition have subject as an array
         if "subject" in resource:
-            resource["subject"] = {"reference": f"Patient/{patient_id}"}
+            subject_ref = {"reference": f"Patient/{patient_id}"}
+            if isinstance(resource["subject"], list):
+                resource["subject"] = [subject_ref]
+            else:
+                resource["subject"] = subject_ref
 
     return bundle
 
