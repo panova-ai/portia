@@ -282,19 +282,22 @@ def add_identifiers_to_bundle(
 
         identifier = None
 
+        # Flag to skip conditional PUT for resources that are heavily referenced
+        skip_conditional_put = False
+
         if resource_type == "Encounter":
-            # Extract date from actualPeriod
+            # Skip conditional PUT for Encounters - they are referenced by many other
+            # resources (Conditions, MedicationStatements, Compositions) and using
+            # conditional PUT breaks reference resolution in transaction bundles.
+            # The FHIR server can't pre-resolve urn:uuid references to Encounters
+            # when their final ID depends on the conditional evaluation.
+            # We still generate identifiers for duplicate detection, but the
+            # Encounters will use POST with urn:uuid fullUrl.
+            skip_conditional_put = True
             enc_date = _extract_date_from_period(resource.get("actualPeriod", {}))
-            entry_fullurl = entry.get("fullUrl", "")
-            entry_id = resource.get("id", "")
             if enc_date:
                 identifier = identifier_service.encounter_identifier(
                     patient_id, enc_date
-                )
-            else:
-                logger.warning(
-                    f"Encounter without actualPeriod: fullUrl={entry_fullurl}, "
-                    f"id={entry_id}"
                 )
 
         elif resource_type == "Condition":
@@ -357,9 +360,13 @@ def add_identifiers_to_bundle(
                 entry_fullurl = entry.get("fullUrl", "")
                 identifier_to_fullurl[search_param] = entry_fullurl
                 identifier_service.add_identifier_to_resource(resource, identifier)
-                entry["request"] = identifier_service.create_conditional_request(
-                    resource_type, identifier
-                )
+                # Only add conditional PUT for resources that aren't heavily referenced
+                # Resources like Encounters are referenced by many others, and conditional
+                # PUT breaks reference resolution in transaction bundles
+                if not skip_conditional_put:
+                    entry["request"] = identifier_service.create_conditional_request(
+                        resource_type, identifier
+                    )
 
         # Update subject reference to use matched patient
         # Note: In R5, some resources like Composition have subject as an array
