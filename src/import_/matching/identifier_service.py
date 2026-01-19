@@ -386,11 +386,15 @@ def add_identifiers_to_bundle(
 
     # Log final resource counts and verify kept Encounter exists
     resource_counts: dict[str, int] = {}
+    encounter_fullurls: list[str] = []
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
         rtype = resource.get("resourceType", "Unknown")
         resource_counts[rtype] = resource_counts.get(rtype, 0) + 1
+        if rtype == "Encounter":
+            encounter_fullurls.append(entry.get("fullUrl", "NO_FULLURL"))
     logger.warning(f"Final bundle: {resource_counts}")
+    logger.warning(f"Sample Encounter fullUrls: {encounter_fullurls[:3]}")
 
     return bundle
 
