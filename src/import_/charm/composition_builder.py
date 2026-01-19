@@ -265,8 +265,8 @@ def _create_section(note: ClinicalNote) -> dict[str, Any] | None:
 
     loinc_info = SOAP_LOINC_CODES[soap_section]
 
-    # Strip HTML tags and clean up the content
-    clean_content = _strip_html(note.content)
+    # Convert HTML to Markdown for readable display
+    clean_content = _html_to_markdown(note.content)
 
     section: dict[str, Any] = {
         "title": soap_section,  # Use SOAP section name, not original note type
@@ -291,24 +291,38 @@ def _create_section(note: ClinicalNote) -> dict[str, Any] | None:
     return section
 
 
-def _strip_html(text: str) -> str:
-    """Strip HTML tags from text, preserving content."""
+def _html_to_markdown(text: str) -> str:
+    """Convert HTML content to Markdown for readable display.
+
+    The omnia frontend renders SOAP notes as plain text and visit summaries
+    using react-markdown. Converting to Markdown preserves formatting intent
+    (line breaks, lists, bold/italic) while being safe to render.
+    """
+    from markdownify import markdownify
+
+    # Convert HTML to Markdown
+    # - strip=['a'] removes links but keeps their text
+    # - heading_style='ATX' uses # for headings
+    # - bullets='-' uses - for unordered lists
+    markdown = markdownify(
+        text,
+        strip=["a", "script", "style"],
+        heading_style="ATX",
+        bullets="-",
+    )
+
+    # Clean up excessive whitespace while preserving paragraph breaks
     import re
 
-    # Remove HTML tags
-    clean = re.sub(r"<[^>]+>", "", text)
-    # Decode common HTML entities
-    clean = (
-        clean.replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", '"')
-        .replace("&#39;", "'")
-        .replace("&nbsp;", " ")
-    )
-    # Normalize whitespace
-    clean = re.sub(r"\s+", " ", clean).strip()
-    return clean
+    # Normalize multiple newlines to double newline (paragraph break)
+    markdown = re.sub(r"\n{3,}", "\n\n", markdown)
+    # Remove leading/trailing whitespace from each line
+    lines = [line.strip() for line in markdown.split("\n")]
+    markdown = "\n".join(lines)
+    # Remove leading/trailing whitespace from entire text
+    markdown = markdown.strip()
+
+    return markdown
 
 
 def _escape_html(text: str) -> str:
