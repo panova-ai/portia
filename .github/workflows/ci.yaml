@@ -35,6 +35,8 @@ jobs:
       - name: Adjust fhir_client path for CI
         run: |
           sed -i 's|path = "../sentia/packages/fhir_client"|path = "sentia/packages/fhir_client"|' pyproject.toml
+          # Regenerate lock file after path change
+          poetry lock
 
       - name: Load cached venv
         id: cached-poetry-dependencies
