@@ -60,7 +60,6 @@ logs/
 Thumbs.db
 
 # Poetry
-poetry.lock
 
 # Pulumi
 infrastructure/pulumi/.pulumi/
