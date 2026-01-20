@@ -7,7 +7,7 @@ resources to their appropriate Encounters based on date matching.
 
 from datetime import date
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from src.import_.charm.extractor import CharmExtractionResult, EncounterData
 
@@ -15,6 +15,8 @@ from src.import_.charm.extractor import CharmExtractionResult, EncounterData
 def link_resources_to_encounters(
     fhir_bundle: dict[str, Any],
     extraction_result: CharmExtractionResult,
+    organization_id: UUID | None = None,
+    practitioner_role_id: UUID | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """
     Create Encounter resources and link existing resources to them.
@@ -22,6 +24,8 @@ def link_resources_to_encounters(
     Args:
         fhir_bundle: The FHIR R4 bundle from MS Converter
         extraction_result: Extracted data from CHARM C-CDA
+        organization_id: Target organization for the import (for serviceProvider)
+        practitioner_role_id: Target PractitionerRole for encounter participant
 
     Returns:
         Tuple of (modified bundle, warnings)
@@ -34,11 +38,25 @@ def link_resources_to_encounters(
         warnings.append("Could not find Patient reference in bundle")
         return fhir_bundle, warnings
 
-    # Get practitioner reference
-    practitioner_ref = _find_practitioner_reference(fhir_bundle)
+    # Use target PractitionerRole if provided, otherwise fall back to Practitioner from C-CDA
+    # Note: The backend requires PractitionerRole reference for encounter participant access control
+    participant_ref: str | None
+    if practitioner_role_id:
+        participant_ref = f"PractitionerRole/{practitioner_role_id}"
+    else:
+        participant_ref = _find_practitioner_reference(fhir_bundle)
+        if participant_ref:
+            warnings.append(
+                "Using Practitioner from C-CDA as encounter participant. "
+                "For proper access control, provide practitioner_role_id."
+            )
 
-    # Get organization reference
-    organization_ref = _find_organization_reference(fhir_bundle)
+    # Use target organization if provided, otherwise fall back to bundle organization
+    organization_ref: str | None
+    if organization_id:
+        organization_ref = f"Organization/{organization_id}"
+    else:
+        organization_ref = _find_organization_reference(fhir_bundle)
 
     # Build a mapping from C-CDA IDs to FHIR resource references
     ccda_to_fhir = _build_ccda_to_fhir_map(fhir_bundle)
@@ -48,13 +66,13 @@ def link_resources_to_encounters(
     encounter_date_to_ref: dict[date, str] = {}
 
     for enc_data in extraction_result.encounters:
-        encounter, enc_ref = _create_encounter(
+        encounter, full_url, enc_ref = _create_encounter(
             enc_data,
             patient_ref,
-            practitioner_ref,
+            participant_ref,
             organization_ref,
         )
-        encounter_entries.append({"resource": encounter})
+        encounter_entries.append({"fullUrl": full_url, "resource": encounter})
         encounter_date_to_ref[enc_data.date] = enc_ref
 
     # Link Conditions to Encounters
@@ -101,15 +119,24 @@ def link_resources_to_encounters(
 
 
 def _find_patient_reference(bundle: dict[str, Any]) -> str | None:
-    """Find the Patient resource reference in the bundle."""
+    """Find the Patient resource reference in the bundle.
+
+    Prefers fullUrl (especially urn:uuid format) for local bundle references
+    to ensure proper resolution in transaction bundles.
+    """
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
         if resource.get("resourceType") == "Patient":
+            full_url: str | None = entry.get("fullUrl")
             patient_id = resource.get("id")
+
+            # Prefer urn:uuid fullUrl for transaction bundle compatibility
+            if full_url and full_url.startswith("urn:uuid:"):
+                return full_url
+            # Fall back to Patient/{id} for non-uuid fullUrls or missing fullUrl
             if patient_id:
                 return f"Patient/{patient_id}"
-            # Try fullUrl
-            full_url: str | None = entry.get("fullUrl")
+            # Last resort: use whatever fullUrl we have
             if full_url:
                 return full_url
     return None
@@ -164,7 +191,13 @@ def _build_ccda_to_fhir_map(bundle: dict[str, Any]) -> dict[str, str]:
         fhir_ref = f"{resource_type}/{resource_id}"
 
         # Check identifiers for C-CDA ID
-        for identifier in resource.get("identifier", []):
+        # Handle both list and single-object identifier formats from MS Converter
+        identifiers = resource.get("identifier", [])
+        if isinstance(identifiers, dict):
+            identifiers = [identifiers]
+        for identifier in identifiers:
+            if not isinstance(identifier, dict):
+                continue
             value = identifier.get("value", "")
 
             # Map both the full identifier and just the value
@@ -183,16 +216,24 @@ def _build_ccda_to_fhir_map(bundle: dict[str, Any]) -> dict[str, str]:
 def _create_encounter(
     enc_data: EncounterData,
     patient_ref: str,
-    practitioner_ref: str | None,
+    participant_ref: str | None,
     organization_ref: str | None,
-) -> tuple[dict[str, Any], str]:
+) -> tuple[dict[str, Any], str, str]:
     """
     Create a FHIR Encounter resource from extracted encounter data.
 
-    Returns tuple of (Encounter resource, reference string).
+    Args:
+        enc_data: Extracted encounter data from C-CDA
+        patient_ref: Reference to the Patient resource
+        participant_ref: Reference to PractitionerRole or Practitioner for participant
+        organization_ref: Reference to Organization for serviceProvider
+
+    Returns tuple of (Encounter resource, fullUrl for bundle, reference string).
     """
     encounter_id = str(uuid4())
-    enc_ref = f"Encounter/{encounter_id}"
+    # Use urn:uuid format for fullUrl to enable local references in transaction bundles
+    full_url = f"urn:uuid:{encounter_id}"
+    enc_ref = full_url  # Use fullUrl as reference for local bundle references
 
     # Format date as FHIR datetime
     date_str = enc_data.date.isoformat()
@@ -223,14 +264,17 @@ def _create_encounter(
             "start": f"{date_str}T00:00:00Z",
             "end": f"{date_str}T23:59:59Z",
         },
+        # Add planned dates for UI compatibility (UI may display these instead of actualPeriod)
+        "plannedStartDate": f"{date_str}T00:00:00Z",
+        "plannedEndDate": f"{date_str}T23:59:59Z",
     }
 
     # Add service provider if we have an organization
     if organization_ref:
         encounter["serviceProvider"] = {"reference": organization_ref}
 
-    # Add participant if we have a practitioner
-    if practitioner_ref:
+    # Add participant if we have a participant reference
+    if participant_ref:
         encounter["participant"] = [
             {
                 "type": [
@@ -244,14 +288,14 @@ def _create_encounter(
                         ]
                     }
                 ],
-                "actor": {"reference": practitioner_ref},
+                "actor": {"reference": participant_ref},
             }
         ]
 
     # Add diagnosis references for linked conditions
     # (These will be updated after conditions are linked)
 
-    return encounter, enc_ref
+    return encounter, full_url, enc_ref
 
 
 def _link_condition_to_encounter(

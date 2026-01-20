@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from src.schemas.import_schemas import MAX_BASE64_SIZE
 from tests.conftest import ClientFactory
 
 
@@ -105,7 +106,9 @@ class TestImportEndpoint:
         counts = data["resources_extracted"]
         assert counts["Patient"] == 1
         assert counts["Condition"] == 2
-        assert counts["MedicationUsage"] == 1  # Transformed from MedicationStatement
+        assert (
+            counts["MedicationStatement"] == 1
+        )  # GCP Healthcare R5 uses MedicationStatement
 
     @pytest.mark.anyio
     async def test_import_invalid_base64_returns_400(
@@ -173,3 +176,25 @@ class TestImportEndpoint:
 
         assert response.status_code == 422
         assert "converter" in response.json()["detail"].lower()
+
+    @pytest.mark.anyio
+    async def test_import_oversized_payload_returns_422(
+        self,
+        client_factory: ClientFactory,
+    ) -> None:
+        """Payload exceeding size limit returns 422 validation error."""
+        # Create data just over the limit
+        oversized_data = "A" * (MAX_BASE64_SIZE + 1000)
+
+        async with client_factory() as client:
+            response = await client.post(
+                "/import",
+                json={
+                    "format": "ccda",
+                    "organization_id": "12345678-1234-1234-1234-123456789012",
+                    "data": oversized_data,
+                },
+            )
+
+        assert response.status_code == 422
+        assert "exceeds maximum size" in str(response.json()["detail"])

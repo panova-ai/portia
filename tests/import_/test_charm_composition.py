@@ -372,9 +372,11 @@ class TestCompositionBuilder:
             if e["resource"]["resourceType"] == "Composition"
         ]
 
-        # Check that special characters are escaped
+        # Check that HTML tags are stripped (plain text output for UI compatibility)
         for comp in compositions:
             for section in comp["section"]:
                 div = section["text"]["div"]
-                assert "&lt;" in div or "<bad>" not in div
-                assert "&amp;" in div or "& " not in div
+                # HTML tags should be stripped, not escaped
+                assert "<bad>" not in div
+                # Ampersands should appear as plain text
+                assert "& " in div or "&" not in div

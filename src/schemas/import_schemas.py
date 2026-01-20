@@ -4,7 +4,12 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# Maximum size for imported data (10MB decoded, ~13.3MB base64-encoded)
+# Typical C-CDA documents are 100KB-2MB
+MAX_IMPORT_SIZE_BYTES = 10 * 1024 * 1024  # 10MB
+MAX_BASE64_SIZE = int(MAX_IMPORT_SIZE_BYTES * 4 / 3) + 100  # base64 overhead + padding
 
 
 class ImportFormat(str, Enum):
@@ -52,6 +57,18 @@ class ImportRequest(BaseModel):
     format: ImportFormat = Field(description="Format of the input data")
     data: str = Field(description="Base64-encoded input data")
 
+    @field_validator("data")
+    @classmethod
+    def validate_data_size(cls, v: str) -> str:
+        """Validate that the data field doesn't exceed the maximum size."""
+        if len(v) > MAX_BASE64_SIZE:
+            max_mb = MAX_IMPORT_SIZE_BYTES / (1024 * 1024)
+            raise ValueError(
+                f"Import data exceeds maximum size of {max_mb:.0f}MB. "
+                "Please split large documents or contact support."
+            )
+        return v
+
     # Context - defaults to current user's context if not provided
     organization_id: UUID | None = Field(
         default=None,
@@ -60,6 +77,10 @@ class ImportRequest(BaseModel):
     practitioner_id: UUID | None = Field(
         default=None,
         description="Target practitioner ID. Defaults to current user.",
+    )
+    practitioner_role_id: UUID | None = Field(
+        default=None,
+        description="PractitionerRole ID for encounter participant. If not provided, will be looked up from practitioner_id and organization_id.",
     )
 
     # Patient matching options
@@ -86,7 +107,7 @@ class ResourceCounts(BaseModel):
 
     Patient: int = 0
     Condition: int = 0
-    MedicationUsage: int = 0
+    MedicationStatement: int = 0  # GCP Healthcare R5 still uses this name
     AllergyIntolerance: int = 0
     Immunization: int = 0
     Observation: int = 0
@@ -97,6 +118,7 @@ class ResourceCounts(BaseModel):
     DocumentReference: int = 0
     Practitioner: int = 0
     Organization: int = 0
+    Medication: int = 0
 
 
 class MatchingResult(BaseModel):
@@ -124,6 +146,22 @@ class MatchingResult(BaseModel):
     )
 
 
+class PersistenceInfo(BaseModel):
+    """Information about FHIR store persistence."""
+
+    persisted: bool = Field(
+        description="Whether resources were successfully persisted to FHIR store"
+    )
+    resources_created: int = Field(
+        default=0,
+        description="Number of resources created in FHIR store",
+    )
+    resources_updated: int = Field(
+        default=0,
+        description="Number of resources updated in FHIR store",
+    )
+
+
 class ImportResponse(BaseModel):
     """Response model for import operation."""
 
@@ -140,6 +178,10 @@ class ImportResponse(BaseModel):
     matching_result: MatchingResult | None = Field(
         default=None,
         description="Result of patient matching (if matching was performed)",
+    )
+    persistence: PersistenceInfo | None = Field(
+        default=None,
+        description="Result of FHIR store persistence (if persistence was enabled)",
     )
     warnings: list[str] = Field(
         default_factory=list,

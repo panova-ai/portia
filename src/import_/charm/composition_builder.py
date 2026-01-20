@@ -11,32 +11,45 @@ from uuid import uuid4
 
 from src.import_.charm.extractor import CharmExtractionResult, ClinicalNote
 
-# LOINC codes for composition sections
-LOINC_CODES = {
-    "History of Present Illness": {
-        "code": "10164-2",
-        "display": "History of Present illness Narrative",
-    },
-    "Past Medical History": {
-        "code": "11348-0",
-        "display": "History of Past illness Narrative",
-    },
-    "Assessment": {
-        "code": "51848-0",
-        "display": "Evaluation note",
-    },
-    "Plan": {
-        "code": "18776-5",
-        "display": "Plan of care note",
-    },
-    "Subjective": {
-        "code": "61150-9",
-        "display": "Subjective Narrative",
-    },
-    "Objective": {
-        "code": "61149-1",
-        "display": "Objective Narrative",
-    },
+# SOAP LOINC codes (matching Sentia's expected codes)
+SOAP_LOINC_CODES = {
+    "Subjective": {"code": "61150-9", "display": "Subjective Narrative"},
+    "Objective": {"code": "61149-1", "display": "Objective Narrative"},
+    "Assessment": {"code": "51848-0", "display": "Evaluation note"},
+    "Plan": {"code": "18776-5", "display": "Plan of care note"},
+    "Additional": {"code": "48767-8", "display": "Annotation comment"},
+}
+
+# Map C-CDA note types to SOAP sections
+NOTE_TYPE_TO_SOAP = {
+    # Subjective section
+    "history of present illness": "Subjective",
+    "hpi": "Subjective",
+    "chief complaint": "Subjective",
+    "reason for visit": "Subjective",
+    "subjective": "Subjective",
+    # Objective section
+    "mental status exam": "Objective",
+    "mse": "Objective",
+    "physical examination": "Objective",
+    "physical exam": "Objective",
+    "vital signs": "Objective",
+    "objective": "Objective",
+    # Assessment section
+    "assessment": "Assessment",
+    "diagnosis": "Assessment",
+    "impression": "Assessment",
+    # Plan section
+    "plan": "Plan",
+    "plan of care": "Plan",
+    "treatment plan": "Plan",
+    "recommendations": "Plan",
+    # Everything else goes to Additional
+    "past medical history": "Additional",
+    "social history": "Additional",
+    "family history": "Additional",
+    "medications": "Additional",
+    "allergies": "Additional",
 }
 
 # Progress note type
@@ -93,7 +106,7 @@ def build_compositions(
             warnings.append(f"No encounter found for notes dated {note_date}")
             continue
 
-        composition = _create_composition(
+        composition, full_url = _create_composition(
             notes=notes,
             note_date=note_date,
             patient_ref=patient_ref,
@@ -102,7 +115,7 @@ def build_compositions(
             encounter_ref=encounter_ref,
         )
 
-        composition_entries.append({"resource": composition})
+        composition_entries.append({"fullUrl": full_url, "resource": composition})
 
     # Add Compositions to the bundle
     existing_entries = fhir_bundle.get("entry", [])
@@ -118,10 +131,14 @@ def _find_patient_reference(bundle: dict[str, Any]) -> str | None:
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
         if resource.get("resourceType") == "Patient":
+            # Prefer fullUrl for transaction bundle compatibility
+            # GCP FHIR API resolves urn:uuid references within transaction bundles
+            full_url: str | None = entry.get("fullUrl")
+            if full_url and full_url.startswith("urn:uuid:"):
+                return full_url
             patient_id = resource.get("id")
             if patient_id:
                 return f"Patient/{patient_id}"
-            full_url: str | None = entry.get("fullUrl")
             if full_url:
                 return full_url
     return None
@@ -132,10 +149,13 @@ def _find_practitioner_reference(bundle: dict[str, Any]) -> str | None:
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
         if resource.get("resourceType") == "Practitioner":
+            # Prefer fullUrl for transaction bundle compatibility
+            full_url: str | None = entry.get("fullUrl")
+            if full_url and full_url.startswith("urn:uuid:"):
+                return full_url
             pract_id = resource.get("id")
             if pract_id:
                 return f"Practitioner/{pract_id}"
-            full_url: str | None = entry.get("fullUrl")
             if full_url:
                 return full_url
     return None
@@ -146,10 +166,13 @@ def _find_organization_reference(bundle: dict[str, Any]) -> str | None:
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
         if resource.get("resourceType") == "Organization":
+            # Prefer fullUrl for transaction bundle compatibility
+            full_url: str | None = entry.get("fullUrl")
+            if full_url and full_url.startswith("urn:uuid:"):
+                return full_url
             org_id = resource.get("id")
             if org_id:
                 return f"Organization/{org_id}"
-            full_url: str | None = entry.get("fullUrl")
             if full_url:
                 return full_url
     return None
@@ -162,7 +185,7 @@ def _create_composition(
     practitioner_ref: str | None,
     organization_ref: str | None,
     encounter_ref: str,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], str]:
     """
     Create a FHIR Composition resource from clinical notes.
 
@@ -175,9 +198,10 @@ def _create_composition(
         encounter_ref: Reference to the Encounter resource
 
     Returns:
-        FHIR Composition resource
+        Tuple of (FHIR Composition resource, fullUrl for bundle)
     """
     composition_id = str(uuid4())
+    full_url = f"urn:uuid:{composition_id}"
     date_str = note_date.isoformat()
 
     # Build sections from notes
@@ -211,7 +235,7 @@ def _create_composition(
     if organization_ref:
         composition["custodian"] = {"reference": organization_ref}
 
-    return composition
+    return composition, full_url
 
 
 def _create_section(note: ClinicalNote) -> dict[str, Any] | None:
@@ -224,29 +248,28 @@ def _create_section(note: ClinicalNote) -> dict[str, Any] | None:
     Returns:
         FHIR CompositionSection or None if note type is unknown
     """
-    # Get the LOINC code for this note type
-    loinc_info = LOINC_CODES.get(note.note_type)
+    # Map note type to SOAP section
+    note_type_lower = note.note_type.lower()
+    soap_section = NOTE_TYPE_TO_SOAP.get(note_type_lower)
 
-    # If we don't have a specific code, use a generic one
-    if not loinc_info:
-        # Try partial matching
-        for key, value in LOINC_CODES.items():
-            if key.lower() in note.note_type.lower():
-                loinc_info = value
+    # Try partial matching if exact match not found
+    if not soap_section:
+        for key, mapped_section in NOTE_TYPE_TO_SOAP.items():
+            if key in note_type_lower or note_type_lower in key:
+                soap_section = mapped_section
                 break
 
-    if not loinc_info:
-        # Use a generic annotation code
-        loinc_info = {
-            "code": "48767-8",
-            "display": "Annotation comment",
-        }
+    # Default to Additional if no mapping found
+    if not soap_section:
+        soap_section = "Additional"
 
-    # Escape HTML entities in the content
-    safe_content = _escape_html(note.content)
+    loinc_info = SOAP_LOINC_CODES[soap_section]
+
+    # Convert HTML to Markdown for readable display
+    clean_content = _html_to_markdown(note.content)
 
     section: dict[str, Any] = {
-        "title": note.note_type,
+        "title": soap_section,  # Use SOAP section name, not original note type
         "code": {
             "coding": [
                 {
@@ -258,11 +281,67 @@ def _create_section(note: ClinicalNote) -> dict[str, Any] | None:
         },
         "text": {
             "status": "generated",
-            "div": f'<div xmlns="http://www.w3.org/1999/xhtml"><p>{safe_content}</p></div>',
+            # Note: FHIR spec requires XHTML div wrapper, but omnia frontend
+            # renders text.div as plain text (no dangerouslySetInnerHTML).
+            # Using plain text for UI compatibility.
+            "div": clean_content,
         },
     }
 
     return section
+
+
+def _html_to_markdown(text: str) -> str:
+    """Format clinical note content for readable display.
+
+    CHARM C-CDA notes often contain plain text without line breaks.
+    This function:
+    1. Strips any HTML tags
+    2. Adds line breaks before common clinical section headers
+    3. Preserves existing formatting if present
+    """
+    import re
+
+    # Strip HTML tags if present
+    clean = re.sub(r"<[^>]+>", "", text)
+
+    # Common clinical section headers that should start on new lines
+    section_headers = [
+        r"Past Psychiatric History",
+        r"Psychiatric Diagnoses/Course of Illness",
+        r"Hx of Psychotherapy",
+        r"Hospitalizations",
+        r"History of Suicide Attempts\??",
+        r"History of Self-harm\??",
+        r"History of Trauma\??",
+        r"Past Psychiatric Medication Trials",
+        r"Past Meds Tried:",
+        r"Past Medical History:?",
+        r"Medical Conditions",
+        r"Other Physicians Seen Regularly",
+        r"Current Medications",
+        r"Current Psychiatric Medications",
+        r"Therapy performed",
+        r"Mental Status Exam:?",
+        r"MSE:?",
+        r"Assessment:?",
+        r"Plan:?",
+        r"Diagnoses:?",
+        r"Outpatient Hx:",
+    ]
+
+    # Add newline before each section header
+    for header in section_headers:
+        # Add newline before header if not already at start of line
+        clean = re.sub(rf"(?<!\n)({header})", r"\n\1", clean, flags=re.IGNORECASE)
+
+    # Clean up multiple spaces
+    clean = re.sub(r" {2,}", " ", clean)
+
+    # Clean up multiple newlines (max 2)
+    clean = re.sub(r"\n{3,}", "\n\n", clean)
+
+    return clean.strip()
 
 
 def _escape_html(text: str) -> str:

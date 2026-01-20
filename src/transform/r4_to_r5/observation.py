@@ -28,9 +28,24 @@ def transform_observation(r4_observation: dict[str, Any]) -> dict[str, Any]:
     r5_observation = r4_observation.copy()
     r5_observation["resourceType"] = "Observation"
 
-    # Transform status if present
+    # Transform status if present, or add default
     if "status" in r5_observation:
         r5_observation["status"] = _transform_status(r5_observation["status"])
+    else:
+        r5_observation["status"] = "unknown"
+
+    # Ensure code is present (required in FHIR)
+    if "code" not in r5_observation:
+        r5_observation["code"] = {
+            "coding": [
+                {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "unknown",
+                    "display": "Unknown",
+                }
+            ],
+            "text": "Unknown observation",
+        }
 
     # Transform hasMember references (no change needed)
 

@@ -43,8 +43,18 @@ class Settings(BaseSettings):
         description="GCP Healthcare API dataset name",
     )
     gcp_fhir_store: str = Field(
-        default="fhir_store_r5",
+        default="fhir_store",
         description="FHIR store name within the dataset",
+    )
+
+    # Sentia API Configuration
+    sentia_url: str = Field(
+        default="http://localhost:8002",
+        description="URL of the Sentia backend service",
+    )
+    sentia_timeout: float = Field(
+        default=30.0,
+        description="Timeout for Sentia API requests in seconds",
     )
 
     model_config = SettingsConfigDict(

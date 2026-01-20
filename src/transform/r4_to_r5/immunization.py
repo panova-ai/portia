@@ -28,6 +28,30 @@ def transform_immunization(r4_immunization: dict[str, Any]) -> dict[str, Any]:
     r5_immunization = r4_immunization.copy()
     r5_immunization["resourceType"] = "Immunization"
 
+    # Ensure status is present (required in FHIR)
+    if "status" not in r5_immunization:
+        r5_immunization["status"] = "completed"
+
+    # Ensure vaccineCode is present (required in FHIR)
+    if "vaccineCode" not in r5_immunization:
+        r5_immunization["vaccineCode"] = {
+            "coding": [
+                {
+                    "system": "http://terminology.hl7.org/CodeSystem/data-absent-reason",
+                    "code": "unknown",
+                    "display": "Unknown",
+                }
+            ],
+            "text": "Unknown vaccine",
+        }
+
+    # Ensure occurrence[x] is present (required in FHIR)
+    if (
+        "occurrenceDateTime" not in r5_immunization
+        and "occurrenceString" not in r5_immunization
+    ):
+        r5_immunization["occurrenceDateTime"] = "1900-01-01"
+
     # Transform statusReason if present
     if "statusReason" in r5_immunization:
         # R5 renames this but keeps same structure
