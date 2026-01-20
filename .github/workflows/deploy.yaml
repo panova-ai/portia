@@ -113,6 +113,8 @@ jobs:
 
     outputs:
       image: ${{ steps.build.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
+      repository: ${{ steps.build.outputs.repository }}
 
     steps:
       - uses: actions/checkout@v4
@@ -139,10 +141,14 @@ jobs:
       - name: Build and push Docker image
         id: build
         run: |
-          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.ARTIFACT_PROJECT }}/${{ env.ARTIFACT_REPO }}/portia:${{ github.sha }}"
+          REPOSITORY="${{ env.REGION }}-docker.pkg.dev/${{ env.ARTIFACT_PROJECT }}/${{ env.ARTIFACT_REPO }}/portia"
+          IMAGE="${REPOSITORY}:${{ github.sha }}"
           docker build -t $IMAGE .
           docker push $IMAGE
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE | cut -d'@' -f2)
           echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+          echo "repository=$REPOSITORY" >> $GITHUB_OUTPUT
 
   deploy-portia:
     needs: [determine-environment, build-and-push]
@@ -191,6 +197,29 @@ jobs:
             MS_CONVERTER_URL=${{ steps.ms-converter.outputs.url }}
             TEMP_BUCKET=${{ needs.determine-environment.outputs.project_id }}-portia-temp
             EXPORTS_BUCKET=${{ needs.determine-environment.outputs.project_id }}-portia-exports
+
+      - name: Save image metadata for promotion
+        if: needs.determine-environment.outputs.environment == 'staging'
+        run: |
+          cat > image.json << EOF
+          {
+            "portia": {
+              "digest": "${{ needs.build-and-push.outputs.digest }}",
+              "repository": "${{ needs.build-and-push.outputs.repository }}"
+            },
+            "image_tag": "${{ github.sha }}",
+            "sha": "${{ github.sha }}"
+          }
+          EOF
+          cat image.json
+
+      - name: Upload image metadata artifact
+        if: needs.determine-environment.outputs.environment == 'staging'
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-metadata-staging
+          path: image.json
+          retention-days: 90
 
   deploy-ms-converter:
     needs: [determine-environment, test]
