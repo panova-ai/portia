@@ -1,0 +1,213 @@
+name: Portia Service Promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      override_portia_digest:
+        description: "(optional) sha256:… to override latest staging portia"
+        required: false
+
+permissions:
+  contents: write
+  id-token: write
+  actions: read
+
+env:
+  REGION: us-central1
+  SERVICE_NAME: portia
+  ARTIFACT_PROJECT: panova-461721
+  ARTIFACT_REPO: agents-repo
+  WIF_PROVIDER: projects/766608563176/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+  WIF_SERVICE_ACCOUNT: github-actions@panova-461721.iam.gserviceaccount.com
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    outputs:
+      portia_digest: ${{ steps.pick.outputs.portia_digest }}
+      portia_repository: ${{ steps.pick.outputs.portia_repository }}
+      image_tag: ${{ steps.pick.outputs.image_tag }}
+      sha: ${{ steps.pick.outputs.sha }}
+    steps:
+      - name: Resolve latest green staging artifact
+        id: resolve
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            const owner = context.repo.owner, repo = context.repo.repo;
+            const workflow_id = 'deploy.yaml';
+            const branch = 'main';
+            const runs = await github.rest.actions.listWorkflowRuns({ owner, repo, workflow_id, branch, status: 'success', per_page: 50 });
+
+            if (!runs.data.workflow_runs || runs.data.workflow_runs.length === 0) {
+              core.setFailed('No successful runs found for deploy.yaml on main branch');
+              return;
+            }
+
+            // Search through successful runs to find one with the artifact
+            for (const run of runs.data.workflow_runs) {
+              if (run.conclusion !== 'success') continue;
+
+              try {
+                const arts = await github.rest.actions.listWorkflowRunArtifacts({ owner, repo, run_id: run.id });
+                const art = arts.data.artifacts.find(a => a.name === 'image-metadata-staging');
+
+                if (art) {
+                  // Check if artifact has expired
+                  if (art.expires_at) {
+                    const expiresAt = new Date(art.expires_at);
+                    const now = new Date();
+                    if (expiresAt <= now) {
+                      core.info(`Skipping expired image-metadata-staging artifact in run ${run.id} (${run.head_sha.substring(0, 7)}) - expired at ${art.expires_at}`);
+                      continue;
+                    }
+                  }
+
+                  core.info(`Found image-metadata-staging artifact in run ${run.id} (${run.head_sha.substring(0, 7)})`);
+                  const { data: zip } = await github.rest.actions.downloadArtifact({ owner, repo, artifact_id: art.id, archive_format: 'zip' });
+                  const fs = require('fs');
+                  fs.writeFileSync('artifact.zip', Buffer.from(zip));
+                  require('child_process').execSync('unzip -o artifact.zip');
+                  const meta = JSON.parse(fs.readFileSync('image.json', 'utf8'));
+                  return JSON.stringify(meta);
+                }
+              } catch (error) {
+                // If error message indicates expiration, log it and continue
+                if (error.message && error.message.includes('expired')) {
+                  core.info(`Skipping expired image-metadata-staging artifact in run ${run.id} (${run.head_sha.substring(0, 7)})`);
+                } else {
+                  core.warning(`Error accessing artifacts for run ${run.id}: ${error.message}`);
+                }
+                continue;
+              }
+            }
+
+            core.setFailed('No image-metadata-staging artifact found in any of the recent successful runs. Ensure a staging deployment has completed successfully with a new image build.');
+            return;
+
+      - name: Choose digest (override optional)
+        id: pick
+        env:
+          RESOLVED_META: ${{ steps.resolve.outputs.result }}
+          OVERRIDE_PORTIA_DIGEST: ${{ inputs.override_portia_digest }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${RESOLVED_META}" ]]; then
+            echo "Resolved metadata is empty" >&2
+            exit 1
+          fi
+
+          if ! command -v jq >/dev/null 2>&1; then
+            echo "jq is required but not installed" >&2
+            exit 1
+          fi
+
+          PORTIA_DIGEST="$(jq -r '.portia.digest' <<<"${RESOLVED_META}")"
+          PORTIA_REPOSITORY="$(jq -r '.portia.repository' <<<"${RESOLVED_META}")"
+          IMAGE_TAG="$(jq -r '.image_tag' <<<"${RESOLVED_META}")"
+          SHA="$(jq -r '.sha' <<<"${RESOLVED_META}")"
+
+          if [[ -n "${OVERRIDE_PORTIA_DIGEST}" ]]; then
+            PORTIA_DIGEST="${OVERRIDE_PORTIA_DIGEST}"
+          fi
+
+          if [[ ! "$PORTIA_DIGEST" =~ ^sha256:[0-9a-fA-F]{64}$ ]]; then
+            echo "Invalid portia digest format: ${PORTIA_DIGEST}" >&2
+            exit 1
+          fi
+
+          if [[ -z "$PORTIA_REPOSITORY" || "$PORTIA_REPOSITORY" == "null" ]]; then
+            echo "Portia repository missing from metadata" >&2
+            exit 1
+          fi
+
+          {
+            echo "portia_digest=$PORTIA_DIGEST"
+            echo "portia_repository=$PORTIA_REPOSITORY"
+            echo "image_tag=$IMAGE_TAG"
+            echo "sha=$SHA"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.WIF_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Verify image exists
+        run: |
+          gcloud config set project "${{ env.ARTIFACT_PROJECT }}"
+          PORTIA_REF="${{ steps.pick.outputs.portia_repository }}@${{ steps.pick.outputs.portia_digest }}"
+
+          echo "Verifying portia image: ${PORTIA_REF}"
+          gcloud artifacts docker images describe "$PORTIA_REF"
+
+      - name: Generate release tag
+        id: release_tag
+        run: |
+          DATE=$(date +%Y-%m-%d)
+          TAG_NAME="portia-${DATE}.${{ github.run_number }}"
+          echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "release_name=portia ${DATE}.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_tag.outputs.tag_name }}
+          name: ${{ steps.release_tag.outputs.release_name }}
+          body: |
+            Portia Image: ${{ steps.pick.outputs.portia_digest }}
+            Image Tag: ${{ steps.pick.outputs.image_tag }}
+            Commit: ${{ steps.pick.outputs.sha }}
+          target_commitish: ${{ steps.pick.outputs.sha }}
+          token: ${{ secrets.RELEASE_PAT }}
+
+  deploy-prod:
+    needs: promote
+    runs-on: ubuntu-latest
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Get MS Converter URL
+        id: ms-converter
+        run: |
+          MS_URL=$(gcloud run services describe ms-fhir-converter \
+            --region=${{ env.REGION }} \
+            --project=panova-prod \
+            --format="value(status.url)" 2>/dev/null || echo "")
+          if [ -z "$MS_URL" ]; then
+            echo "MS Converter not deployed yet, using placeholder"
+            MS_URL="https://ms-fhir-converter-placeholder.run.app"
+          fi
+          echo "url=$MS_URL" >> $GITHUB_OUTPUT
+
+      - name: Deploy to Cloud Run (prod)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          region: ${{ env.REGION }}
+          project_id: panova-prod
+          image: ${{ needs.promote.outputs.portia_repository }}@${{ needs.promote.outputs.portia_digest }}
+          env_vars: |
+            GCP_PROJECT_ID=panova-prod
+            GCP_REGION=${{ env.REGION }}
+            MS_CONVERTER_URL=${{ steps.ms-converter.outputs.url }}
+            TEMP_BUCKET=panova-prod-portia-temp
+            EXPORTS_BUCKET=panova-prod-portia-exports
