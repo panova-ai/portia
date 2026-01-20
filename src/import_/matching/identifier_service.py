@@ -165,17 +165,25 @@ def _extract_code(resource: dict[str, Any]) -> str | None:
 
 # Resource types that should be deleted on re-import
 # ORDER MATTERS: Delete in reverse dependency order (referencing resources first)
-# Encounter must be last since Composition, Condition, etc. reference it
+# Key relationships:
+#   - DiagnosticReport.result -> Observation (delete DiagnosticReport first)
+#   - Composition.encounter -> Encounter
+#   - Condition.encounter -> Encounter
+#   - MedicationStatement.encounter -> Encounter
+#   - Observation.encounter -> Encounter
+#   - Procedure.encounter -> Encounter
+#   - Immunization.encounter -> Encounter
+#   - DocumentReference.context -> Encounter
 IMPORTABLE_RESOURCE_TYPES = [
+    "DiagnosticReport",  # References Observation AND Encounter - delete first
+    "DocumentReference",  # May reference Encounter via context
     "Composition",  # References Encounter
     "Condition",  # References Encounter
     "MedicationStatement",  # References Encounter
-    "Observation",  # May reference Encounter
     "Procedure",  # May reference Encounter
     "Immunization",  # May reference Encounter
-    "DiagnosticReport",  # May reference Encounter
-    "DocumentReference",  # May reference Encounter via context
-    "Encounter",  # Referenced by above - delete last
+    "Observation",  # Referenced by DiagnosticReport, references Encounter
+    "Encounter",  # Referenced by most resources - delete last
     # Note: Patient is NOT included - we keep the patient
     # Note: Practitioner and Organization are NOT included - they're shared
     # Note: Medication is NOT included - they're contained/referenced
