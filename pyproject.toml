@@ -21,7 +21,6 @@ PyJWT = "^2.10.0"
 cachecontrol = "^0.14.0"
 requests = "^2.32.0"
 fhir_client = { path = "../sentia/packages/fhir_client", develop = true }
-markdownify = "^1.2.2"
 
 [tool.poetry.group.test.dependencies]
 pytest = "^8.4.0"

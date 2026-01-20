@@ -292,37 +292,56 @@ def _create_section(note: ClinicalNote) -> dict[str, Any] | None:
 
 
 def _html_to_markdown(text: str) -> str:
-    """Convert HTML content to Markdown for readable display.
+    """Format clinical note content for readable display.
 
-    The omnia frontend renders SOAP notes as plain text and visit summaries
-    using react-markdown. Converting to Markdown preserves formatting intent
-    (line breaks, lists, bold/italic) while being safe to render.
+    CHARM C-CDA notes often contain plain text without line breaks.
+    This function:
+    1. Strips any HTML tags
+    2. Adds line breaks before common clinical section headers
+    3. Preserves existing formatting if present
     """
-    from markdownify import markdownify
-
-    # Convert HTML to Markdown
-    # - strip=['a'] removes links but keeps their text
-    # - heading_style='ATX' uses # for headings
-    # - bullets='-' uses - for unordered lists
-    markdown = markdownify(
-        text,
-        strip=["a", "script", "style"],
-        heading_style="ATX",
-        bullets="-",
-    )
-
-    # Clean up excessive whitespace while preserving paragraph breaks
     import re
 
-    # Normalize multiple newlines to double newline (paragraph break)
-    markdown = re.sub(r"\n{3,}", "\n\n", markdown)
-    # Remove leading/trailing whitespace from each line
-    lines = [line.strip() for line in markdown.split("\n")]
-    markdown = "\n".join(lines)
-    # Remove leading/trailing whitespace from entire text
-    markdown = markdown.strip()
+    # Strip HTML tags if present
+    clean = re.sub(r"<[^>]+>", "", text)
 
-    return markdown
+    # Common clinical section headers that should start on new lines
+    section_headers = [
+        r"Past Psychiatric History",
+        r"Psychiatric Diagnoses/Course of Illness",
+        r"Hx of Psychotherapy",
+        r"Hospitalizations",
+        r"History of Suicide Attempts\??",
+        r"History of Self-harm\??",
+        r"History of Trauma\??",
+        r"Past Psychiatric Medication Trials",
+        r"Past Meds Tried:",
+        r"Past Medical History:?",
+        r"Medical Conditions",
+        r"Other Physicians Seen Regularly",
+        r"Current Medications",
+        r"Current Psychiatric Medications",
+        r"Therapy performed",
+        r"Mental Status Exam:?",
+        r"MSE:?",
+        r"Assessment:?",
+        r"Plan:?",
+        r"Diagnoses:?",
+        r"Outpatient Hx:",
+    ]
+
+    # Add newline before each section header
+    for header in section_headers:
+        # Add newline before header if not already at start of line
+        clean = re.sub(rf"(?<!\n)({header})", r"\n\1", clean, flags=re.IGNORECASE)
+
+    # Clean up multiple spaces
+    clean = re.sub(r" {2,}", " ", clean)
+
+    # Clean up multiple newlines (max 2)
+    clean = re.sub(r"\n{3,}", "\n\n", clean)
+
+    return clean.strip()
 
 
 def _escape_html(text: str) -> str:

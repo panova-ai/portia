@@ -382,18 +382,26 @@ class CharmCcdaExtractor:
         return notes
 
     def _get_element_text(self, elem: Element) -> str:
-        """Get all text content from an element, including nested elements."""
+        """Get all text content from an element, including nested elements.
+
+        Handles <br> elements by inserting newlines to preserve line breaks.
+        """
         texts = []
         if elem.text:
             texts.append(elem.text)
         for child in elem:
+            # Handle <br> elements by inserting newline
+            tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+            if tag.lower() == "br":
+                texts.append("\n")
             if child.text:
                 texts.append(child.text)
             if child.tail:
                 texts.append(child.tail)
         if elem.tail:
             texts.append(elem.tail)
-        return " ".join(texts).strip()
+        # Use empty join to preserve original whitespace structure
+        return "".join(texts).strip()
 
     def _extract_problems(self) -> list[ProblemEntry]:
         """Extract problems/conditions from the Problems section."""
