@@ -1045,7 +1045,7 @@ def _enrich_medication_dosages(
             if med.code not in code_to_dosage:
                 code_to_dosage[med.code] = med.dosage
 
-    logger.debug(f"Medication dosage map: {code_to_dosage}")
+    logger.info(f"Medication dosage map: {code_to_dosage}")
 
     # Find all MedicationStatement resources
     med_statements_found = 0
@@ -1061,20 +1061,20 @@ def _enrich_medication_dosages(
         if existing_dosage:
             has_text = any(d.get("text") for d in existing_dosage)
             if has_text:
-                logger.debug("MedicationStatement already has dosage text, skipping")
+                logger.info("MedicationStatement already has dosage text, skipping")
                 continue
 
         # Get the medication code from the resource
         med_code = _get_medication_code_from_statement(resource, bundle)
-        logger.debug(f"MedicationStatement med_code: {med_code}")
+        logger.info(f"MedicationStatement med_code: {med_code}")
         if not med_code:
-            logger.debug("Could not extract medication code from MedicationStatement")
+            logger.info("Could not extract medication code from MedicationStatement")
             continue
 
         # Look up dosage from extracted medications
         dosage_text = code_to_dosage.get(med_code)
         if not dosage_text:
-            logger.debug(f"No dosage found for code {med_code}")
+            logger.info(f"No dosage found for code {med_code}")
             continue
 
         # Add or update dosage
@@ -1085,10 +1085,10 @@ def _enrich_medication_dosages(
             # Create new dosage entry
             resource["dosage"] = [{"text": dosage_text}]
 
-        logger.debug(f"Enriched medication {med_code} with dosage: {dosage_text}")
+        logger.info(f"Enriched medication {med_code} with dosage: {dosage_text}")
         enriched_count += 1
 
-    logger.debug(
+    logger.info(
         f"Found {med_statements_found} MedicationStatements, enriched {enriched_count}"
     )
 
