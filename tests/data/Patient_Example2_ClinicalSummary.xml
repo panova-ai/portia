@@ -1,0 +1,884 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<?xml-stylesheet type="text/xsl" href="styles/Summary_CCD_CDA.xsl"?><ClinicalDocument xmlns="urn:hl7-org:v3" xmlns:cda="urn:hl7-org:v3" xmlns:sdtc="urn:hl7-org:sdtc" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+   <realmCode code="US"/>
+   <typeId extension="POCD_HD000040" root="2.16.840.1.113883.1.3"/>
+   <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.1.1"/>
+   <templateId root="2.16.840.1.113883.10.20.22.1.1"/>
+   <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.1.2"/>
+   <templateId root="2.16.840.1.113883.10.20.22.1.2"/>
+   <id root="b30c7079-3225-3503-9ac1-c5b9cce6c00d"/>
+   <code code="34133-9" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC" displayName="Clinical Summary"/>
+   <title>Clinical Summary of Testpatienttwo Elkind</title>
+   <effectiveTime value="20260121232201-0800"/>
+   <confidentialityCode code="N" codeSystem="2.16.840.1.113883.5.25"/>
+   <languageCode code="en-US"/>
+   <recordTarget>
+      <patientRole>
+         <id extension="PAT-REDACTED-002" root="5b10b523-c15c-3f57-9b81-5fe9d314cee6"/>
+         <addr use="HP">
+            <streetAddressLine>123 Redacted Street</streetAddressLine>
+            <city>Redacted</city>
+            <state>CA</state>
+            <postalCode>00000</postalCode>
+            <country>US</country>
+         </addr>
+         <telecom value="mailto:redacted@example.com"/>
+         <patient>
+            <name use="L">
+               <given>Testpatienttwo</given>
+               <family>Elkind</family>
+            </name>
+            <administrativeGenderCode code="F" codeSystem="2.16.840.1.113883.5.1" codeSystemName="AdministrativeGender" displayName="female"/>
+            <birthTime value="20021126"/>
+            <raceCode nullFlavor="NI"/>
+            <ethnicGroupCode nullFlavor="NI"/>
+         </patient>
+      </patientRole>
+   </recordTarget>
+   <author>
+      <time value="20260121"/>
+      <assignedAuthor>
+         <id root="2.16.840.1.113883.4.6"/>
+         <addr nullFlavor="NI">
+            <streetAddressLine nullFlavor="NI"/>
+            <city nullFlavor="NI"/>
+         </addr>
+         <telecom use="MC" value="tel:5613247663"/>
+         <telecom value="mailto:jae.elkind@gmail.com"/>
+         <assignedPerson>
+            <name>
+               <given>Jae</given>
+               <family>Elkind</family>
+            </name>
+         </assignedPerson>
+         <representedOrganization>
+            <id root="2.16.840.1.113883.19.5"/>
+            <name>Sofia Elkind MD</name>
+            <telecom use="HP" value="tel:+1(619)-494-0507"/>
+            <addr use="WP">
+               <streetAddressLine>15525 Pomerado Rd Ste E3</streetAddressLine>
+               <city>Poway</city>
+               <state>CA</state>
+               <postalCode>92064</postalCode>
+               <country>US</country>
+            </addr>
+         </representedOrganization>
+      </assignedAuthor>
+   </author>
+   <custodian>
+      <assignedCustodian>
+         <representedCustodianOrganization>
+            <id root="2.16.840.1.113883.4.6"/>
+            <name>Sofia Elkind MD</name>
+            <telecom use="HP" value="tel:+1(619)-494-0507"/>
+            <addr use="WP">
+               <streetAddressLine>15525 Pomerado Rd Ste E3</streetAddressLine>
+               <city>Poway</city>
+               <state>CA</state>
+               <postalCode>92064</postalCode>
+               <country>US</country>
+            </addr>
+         </representedCustodianOrganization>
+      </assignedCustodian>
+   </custodian>
+   <documentationOf>
+      <serviceEvent classCode="PCPR">
+         <effectiveTime>
+            <low value="20260121"/>
+            <high value="20260121"/>
+         </effectiveTime>
+         <performer typeCode="PRF">
+            <assignedEntity>
+               <id root="2.16.840.1.113883.4.6"/>
+               <code codeSystem="2.16.840.1.113883.6.101" nullFlavor="NI"/>
+               <addr nullFlavor="NI">
+                  <streetAddressLine nullFlavor="NI"/>
+                  <city nullFlavor="NI"/>
+               </addr>
+               <telecom nullFlavor="NI"/>
+               <assignedPerson>
+                  <name>
+                     <given> </given>
+                  </name>
+               </assignedPerson>
+            </assignedEntity>
+         </performer>
+      </serviceEvent>
+   </documentationOf>
+   <component>
+      <structuredBody>
+         <component>
+            <section>
+               <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.2.17"/>
+               <templateId root="2.16.840.1.113883.10.20.22.2.17"/>
+               <code code="29762-2" codeSystem="2.16.840.1.113883.6.1"/>
+               <title>Social History</title>
+               <text>
+                  <table border="1" width="100%">
+                     <thead>
+                        <tr>
+                           <th>Social History Element</th>
+                           <th>Description</th>
+                        </tr>
+                     </thead>
+                     <tbody>
+                        <tr>
+                           <td>Patient Sex</td>
+                           <td>female</td>
+                        </tr>
+                     </tbody>
+                  </table>
+               </text>
+               <entry typeCode="DRIV">
+                  <observation classCode="OBS" moodCode="EVN">
+                     <templateId root="2.16.840.1.113883.10.20.22.4.78"/>
+                     <templateId root="2.16.840.1.113883.10.20.22.4.78"/>
+                     <code nullFlavor="NI"/>
+                     <statusCode code="completed"/>
+                     <effectiveTime>
+                        <low nullFlavor="NI"/>
+                     </effectiveTime>
+                     <value nullFlavor="NI" xsi:type="CD"/>
+                  </observation>
+               </entry>
+               <entry typeCode="DRIV">
+                  <observation classCode="OBS" moodCode="EVN">
+                     <templateId extension="2016-06-01" root="2.16.840.1.113883.10.20.22.4.200"/>
+                     <code code="76689-9" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC"/>
+                     <statusCode code="completed"/>
+                     <value code="F" codeSystem="2.16.840.1.113883.5.1" displayName="Female" xsi:type="CD"/>
+                  </observation>
+               </entry>
+            </section>
+         </component>
+         <component>
+            <section>
+               <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.2.4.1"/>
+               <templateId root="2.16.840.1.113883.10.20.22.2.4.1"/>
+               <code code="8716-3" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC" displayName="VITAL SIGNS"/>
+               <title> </title>
+               <text>No Vital information</text>
+               <entry>
+                  <organizer classCode="CLUSTER" moodCode="EVN">
+                     <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.4.26"/>
+                     <templateId root="2.16.840.1.113883.10.20.22.4.26"/>
+                     <id nullFlavor="NI"/>
+                     <code code="46680005" codeSystem="2.16.840.1.113883.6.96" codeSystemName="SNOMEDCT">
+                        <translation code="74728-7" codeSystem="2.16.840.1.113883.6.1"/>
+                     </code>
+                     <statusCode code="completed"/>
+                     <effectiveTime nullFlavor="NI"/>
+                     <component>
+                        <observation classCode="OBS" moodCode="EVN">
+                           <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.4.27"/>
+                           <templateId root="2.16.840.1.113883.10.20.22.4.27"/>
+                           <id nullFlavor="NI"/>
+                           <code nullFlavor="NI"/>
+                           <statusCode code="completed"/>
+                           <effectiveTime nullFlavor="NI"/>
+                           <value nullFlavor="NI" xsi:type="PQ"/>
+                        </observation>
+                     </component>
+                  </organizer>
+               </entry>
+            </section>
+         </component>
+         <component>
+            <section>
+               <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.2.6.1"/>
+               <templateId root="2.16.840.1.113883.10.20.22.2.6.1"/>
+               <code code="48765-2" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC" displayName="Allergies, adverse reactions, alerts"/>
+               <title>Allergies</title>
+               <text>
+                  <table border="1" width="100%">
+                     <thead>
+                        <tr>
+                           <th>Allergen</th>
+                           <th>Status</th>
+                           <th>Reaction</th>
+                           <th>Severity</th>
+                           <th>Date</th>
+                        </tr>
+                     </thead>
+                     <tbody>
+                        <tr>
+                           <td>sertraline</td>
+                           <td>Active</td>
+                           <td>itching, hivies</td>
+                           <td>Mild</td>
+                           <td>09/04/2025</td>
+                        </tr>
+                     </tbody>
+                  </table>
+               </text>
+               <entry>
+                  <act classCode="ACT" moodCode="EVN">
+                     <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.4.30"/>
+                     <templateId root="2.16.840.1.113883.10.20.22.4.30"/>
+                     <id root="4214fa93-3775-32bd-815b-cdf3d71624d3"/>
+                     <code code="CONC" codeSystem="2.16.840.1.113883.5.6"/>
+                     <statusCode code="active"/>
+                     <effectiveTime>
+                        <low value="20250904"/>
+                     </effectiveTime>
+                     <entryRelationship typeCode="SUBJ">
+                        <observation classCode="OBS" moodCode="EVN">
+                           <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.4.7"/>
+                           <templateId root="2.16.840.1.113883.10.20.22.4.7"/>
+                           <id root="d1468fb6-75ea-38cb-a201-7c4e4bb6b0d8"/>
+                           <code code="ASSERTION" codeSystem="2.16.840.1.113883.5.4"/>
+                           <statusCode code="completed"/>
+                           <effectiveTime>
+                              <low nullFlavor="UNK"/>
+                           </effectiveTime>
+                           <value code="416098002" codeSystem="2.16.840.1.113883.6.96" codeSystemName="SNOMED CT" displayName="Drug allergy" xsi:type="CD"/>
+                           <author>
+                              <templateId root="2.16.840.1.113883.10.20.22.4.119"/>
+                              <time value="202509081125-0700"/>
+                              <assignedAuthor>
+                                 <id root="2.16.840.1.113883.4.6"/>
+                                 <assignedPerson>
+                                    <name>
+                                       <prefix>Dr. </prefix>
+                                       <given>Sofia</given>
+                                       <family>Elkind</family>
+                                    </name>
+                                 </assignedPerson>
+                                 <representedOrganization>
+                                    <id root="2.16.840.1.113883.19.5"/>
+                                    <name>Sofia Elkind MD</name>
+                                 </representedOrganization>
+                              </assignedAuthor>
+                           </author>
+                           <participant typeCode="CSM">
+                              <participantRole classCode="MANU">
+                                 <playingEntity classCode="MMAT">
+                                    <code nullFlavor="NI"/>
+                                 </playingEntity>
+                              </participantRole>
+                           </participant>
+                           <entryRelationship inversionInd="true" typeCode="MFST">
+                              <observation classCode="OBS" moodCode="EVN">
+                                 <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.4.9"/>
+                                 <templateId root="2.16.840.1.113883.10.20.22.4.9"/>
+                                 <id root="53fde4f0-f782-32bf-aa42-4459a2b8705b"/>
+                                 <code code="ASSERTION" codeSystem="2.16.840.1.113883.5.4"/>
+                                 <statusCode code="completed"/>
+                                 <value nullFlavor="NI" xsi:type="CD"/>
+                                 <entryRelationship inversionInd="true" typeCode="SUBJ">
+                                    <observation classCode="OBS" moodCode="EVN">
+                                       <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.4.8"/>
+                                       <templateId root="2.16.840.1.113883.10.20.22.4.8"/>
+                                       <code code="SEV" codeSystem="2.16.840.1.113883.5.4"/>
+                                       <statusCode code="completed"/>
+                                       <value code="255604002" codeSystem="2.16.840.1.113883.6.96" xsi:type="CD"/>
+                                    </observation>
+                                 </entryRelationship>
+                              </observation>
+                           </entryRelationship>
+                        </observation>
+                     </entryRelationship>
+                  </act>
+               </entry>
+            </section>
+         </component>
+         <component>
+            <section>
+               <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.2.5.1"/>
+               <templateId root="2.16.840.1.113883.10.20.22.2.5.1"/>
+               <code code="11450-4" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC" displayName="PROBLEM LIST"/>
+               <title>PROBLEMS</title>
+               <text>No problems</text>
+               <entry>
+                  <act classCode="ACT" moodCode="EVN">
+                     <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.4.3"/>
+                     <templateId root="2.16.840.1.113883.10.20.22.4.3"/>
+                     <id nullFlavor="NI"/>
+                     <code code="CONC" codeSystem="2.16.840.1.113883.5.6"/>
+                     <statusCode code="completed"/>
+                     <effectiveTime>
+                        <low nullFlavor="UNK"/>
+                     </effectiveTime>
+                     <entryRelationship typeCode="SUBJ">
+                        <observation classCode="OBS" moodCode="EVN" negationInd="true">
+                           <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.4.4"/>
+                           <templateId root="2.16.840.1.113883.10.20.22.4.4"/>
+                           <id nullFlavor="NI"/>
+                           <code code="ASSERTION" codeSystem="2.16.840.1.113883.5.4" displayName="Problem"/>
+                           <statusCode code="completed"/>
+                           <effectiveTime>
+                              <low nullFlavor="UNK"/>
+                           </effectiveTime>
+                           <value code="55607006" codeSystem="2.16.840.1.113883.6.96" displayName="Problem" xsi:type="CD"/>
+                        </observation>
+                     </entryRelationship>
+                  </act>
+               </entry>
+            </section>
+         </component>
+         <component>
+            <section>
+               <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.2.1.1"/>
+               <templateId root="2.16.840.1.113883.10.20.22.2.1.1"/>
+               <code code="10160-0" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC" displayName="HISTORY OF MEDICATION USE"/>
+               <title>Medications/Supplements</title>
+               <text>
+                  <paragraph>Medications</paragraph>
+                  <table border="1" width="100%">
+                     <thead>
+                        <tr>
+                           <th>Medication</th>
+                           <th>Directions</th>
+                           <th>Status</th>
+                           <th>Start Date</th>
+                           <th>Stop Date</th>
+                        </tr>
+                     </thead>
+                     <tbody>
+                        <tr>
+                           <td ID="Medication1">prazosin 1 mg capsule [ PRAZOSIN HCL ]</td>
+                           <td>1 cap by mouth every evening</td>
+                           <td>Active</td>
+                           <td>12/01/2025</td>
+                           <td/>
+                        </tr>
+                        <tr>
+                           <td ID="Medication2">traZODone 100 mg tablet [ traZODone HCL ]</td>
+                           <td>1.5 tab PO nightly</td>
+                           <td>Active</td>
+                           <td>12/01/2025</td>
+                           <td/>
+                        </tr>
+                        <tr>
+                           <td ID="Medication3">escitalopram 20 mg tablet [ escitalopram OXALATE ]</td>
+                           <td>1 tablet(s) once a day, oral route</td>
+                           <td>Active</td>
+                           <td>12/01/2025</td>
+                           <td/>
+                        </tr>
+                        <tr>
+                           <td ID="Medication4">escitalopram 20 mg tablet [ escitalopram OXALATE ]</td>
+                           <td>1 tablet(s) once a day, oral route</td>
+                           <td>Active</td>
+                           <td>11/03/2025</td>
+                           <td/>
+                        </tr>
+                        <tr>
+                           <td ID="Medication5">prazosin 1 mg capsule [ PRAZOSIN HCL ]</td>
+                           <td>1 cap by mouth every evening</td>
+                           <td>Active</td>
+                           <td>11/03/2025</td>
+                           <td/>
+                        </tr>
+                        <tr>
+                           <td ID="Medication6">FLUoxetine 20 mg capsule [ FLUoxetine HCL ]</td>
+                           <td>1 capsule(s) once a day in the morning, oral route</td>
+                           <td>Active</td>
+                           <td>08/07/2025</td>
+                           <td/>
+                        </tr>
+                     </tbody>
+                  </table>
+               </text>
+               <entry>
+                  <substanceAdministration classCode="SBADM" moodCode="INT">
+                     <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.4.16"/>
+                     <templateId root="2.16.840.1.113883.10.20.22.4.16"/>
+                     <id root="8c31a541-1602-3fae-b999-e6de066e3ab4"/>
+                     <text>
+                        <reference value="#Medication1"/>
+                        1 cap by mouth every evening
+                     </text>
+                     <statusCode code="active"/>
+                     <effectiveTime xsi:type="IVL_TS">
+                        <low value="20251201"/>
+                        <high nullFlavor="UNK"/>
+                     </effectiveTime>
+                     <routeCode code="C38288" codeSystem="2.16.840.1.113883.3.26.1.1" codeSystemName="NCI Thesaurus" displayName="ORAL"/>
+                     <doseQuantity nullFlavor="NI"/>
+                     <consumable>
+                        <manufacturedProduct classCode="MANU">
+                           <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.4.23"/>
+                           <templateId root="2.16.840.1.113883.10.20.22.4.23"/>
+                           <id root="6c74d2af-9277-3549-b153-881513dbe407"/>
+                           <manufacturedMaterial>
+                              <code code="312593" codeSystem="2.16.840.1.113883.6.88" codeSystemName="RxNorm" displayName="prazosin 1 mg capsule"/>
+                           </manufacturedMaterial>
+                        </manufacturedProduct>
+                     </consumable>
+                     <author>
+                        <templateId root="2.16.840.1.113883.10.20.22.4.119"/>
+                        <time value="202512010117-0800"/>
+                        <assignedAuthor>
+                           <id root="2.16.840.1.113883.4.6"/>
+                           <assignedPerson>
+                              <name>
+                                 <prefix>Dr. </prefix>
+                                 <given>Sofia</given>
+                                 <family>Elkind</family>
+                              </name>
+                           </assignedPerson>
+                           <representedOrganization>
+                              <id root="2.16.840.1.113883.19.5"/>
+                              <name>Sofia Elkind MD</name>
+                           </representedOrganization>
+                        </assignedAuthor>
+                     </author>
+                  </substanceAdministration>
+               </entry>
+               <entry>
+                  <substanceAdministration classCode="SBADM" moodCode="INT">
+                     <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.4.16"/>
+                     <templateId root="2.16.840.1.113883.10.20.22.4.16"/>
+                     <id root="f66001a9-5b19-3c31-9ac5-222b51df4e59"/>
+                     <text>
+                        <reference value="#Medication2"/>
+                        1.5 tab PO nightly
+                     </text>
+                     <statusCode code="active"/>
+                     <effectiveTime xsi:type="IVL_TS">
+                        <low value="20251201"/>
+                        <high nullFlavor="UNK"/>
+                     </effectiveTime>
+                     <routeCode code="C38288" codeSystem="2.16.840.1.113883.3.26.1.1" codeSystemName="NCI Thesaurus" displayName="ORAL"/>
+                     <doseQuantity nullFlavor="NI"/>
+                     <consumable>
+                        <manufacturedProduct classCode="MANU">
+                           <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.4.23"/>
+                           <templateId root="2.16.840.1.113883.10.20.22.4.23"/>
+                           <id root="5bf15091-259d-3b88-89a2-fbca3557e357"/>
+                           <manufacturedMaterial>
+                              <code code="856373" codeSystem="2.16.840.1.113883.6.88" codeSystemName="RxNorm" displayName="traZODone 100 mg tablet"/>
+                           </manufacturedMaterial>
+                        </manufacturedProduct>
+                     </consumable>
+                     <author>
+                        <templateId root="2.16.840.1.113883.10.20.22.4.119"/>
+                        <time value="202512010119-0800"/>
+                        <assignedAuthor>
+                           <id root="2.16.840.1.113883.4.6"/>
+                           <assignedPerson>
+                              <name>
+                                 <prefix>Dr. </prefix>
+                                 <given>Sofia</given>
+                                 <family>Elkind</family>
+                              </name>
+                           </assignedPerson>
+                           <representedOrganization>
+                              <id root="2.16.840.1.113883.19.5"/>
+                              <name>Sofia Elkind MD</name>
+                           </representedOrganization>
+                        </assignedAuthor>
+                     </author>
+                  </substanceAdministration>
+               </entry>
+               <entry>
+                  <substanceAdministration classCode="SBADM" moodCode="INT">
+                     <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.4.16"/>
+                     <templateId root="2.16.840.1.113883.10.20.22.4.16"/>
+                     <id root="98ff1342-5953-3c84-8419-63cd2bf4c1f0"/>
+                     <text>
+                        <reference value="#Medication3"/>
+                        1 tablet(s) once a day, oral route
+                     </text>
+                     <statusCode code="active"/>
+                     <effectiveTime xsi:type="IVL_TS">
+                        <low value="20251201"/>
+                        <high nullFlavor="UNK"/>
+                     </effectiveTime>
+                     <routeCode code="C38288" codeSystem="2.16.840.1.113883.3.26.1.1" codeSystemName="NCI Thesaurus" displayName="ORAL"/>
+                     <doseQuantity value="1"/>
+                     <consumable>
+                        <manufacturedProduct classCode="MANU">
+                           <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.4.23"/>
+                           <templateId root="2.16.840.1.113883.10.20.22.4.23"/>
+                           <id root="f7049a5e-dd9f-3fb4-9c97-03c3d4a069b9"/>
+                           <manufacturedMaterial>
+                              <code code="351250" codeSystem="2.16.840.1.113883.6.88" codeSystemName="RxNorm" displayName="escitalopram 20 mg tablet"/>
+                           </manufacturedMaterial>
+                        </manufacturedProduct>
+                     </consumable>
+                     <author>
+                        <templateId root="2.16.840.1.113883.10.20.22.4.119"/>
+                        <time value="202512010120-0800"/>
+                        <assignedAuthor>
+                           <id root="2.16.840.1.113883.4.6"/>
+                           <assignedPerson>
+                              <name>
+                                 <prefix>Dr. </prefix>
+                                 <given>Sofia</given>
+                                 <family>Elkind</family>
+                              </name>
+                           </assignedPerson>
+                           <representedOrganization>
+                              <id root="2.16.840.1.113883.19.5"/>
+                              <name>Sofia Elkind MD</name>
+                           </representedOrganization>
+                        </assignedAuthor>
+                     </author>
+                  </substanceAdministration>
+               </entry>
+               <entry>
+                  <substanceAdministration classCode="SBADM" moodCode="INT">
+                     <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.4.16"/>
+                     <templateId root="2.16.840.1.113883.10.20.22.4.16"/>
+                     <id root="aab648aa-d414-3bd1-a5cc-fac73cd18754"/>
+                     <text>
+                        <reference value="#Medication4"/>
+                        1 tablet(s) once a day, oral route
+                     </text>
+                     <statusCode code="active"/>
+                     <effectiveTime xsi:type="IVL_TS">
+                        <low value="20251103"/>
+                        <high nullFlavor="UNK"/>
+                     </effectiveTime>
+                     <routeCode code="C38288" codeSystem="2.16.840.1.113883.3.26.1.1" codeSystemName="NCI Thesaurus" displayName="ORAL"/>
+                     <doseQuantity value="1"/>
+                     <consumable>
+                        <manufacturedProduct classCode="MANU">
+                           <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.4.23"/>
+                           <templateId root="2.16.840.1.113883.10.20.22.4.23"/>
+                           <id root="77cc10ed-f242-3dfb-b554-867aa835858e"/>
+                           <manufacturedMaterial>
+                              <code code="351250" codeSystem="2.16.840.1.113883.6.88" codeSystemName="RxNorm" displayName="escitalopram 20 mg tablet"/>
+                           </manufacturedMaterial>
+                        </manufacturedProduct>
+                     </consumable>
+                     <author>
+                        <templateId root="2.16.840.1.113883.10.20.22.4.119"/>
+                        <time value="202511030141-0800"/>
+                        <assignedAuthor>
+                           <id root="2.16.840.1.113883.4.6"/>
+                           <assignedPerson>
+                              <name>
+                                 <prefix>Dr. </prefix>
+                                 <given>Sofia</given>
+                                 <family>Elkind</family>
+                              </name>
+                           </assignedPerson>
+                           <representedOrganization>
+                              <id root="2.16.840.1.113883.19.5"/>
+                              <name>Sofia Elkind MD</name>
+                           </representedOrganization>
+                        </assignedAuthor>
+                     </author>
+                  </substanceAdministration>
+               </entry>
+               <entry>
+                  <substanceAdministration classCode="SBADM" moodCode="INT">
+                     <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.4.16"/>
+                     <templateId root="2.16.840.1.113883.10.20.22.4.16"/>
+                     <id root="dba2a57d-b9a4-36d9-894b-965cb2c6308e"/>
+                     <text>
+                        <reference value="#Medication5"/>
+                        1 cap by mouth every evening
+                     </text>
+                     <statusCode code="active"/>
+                     <effectiveTime xsi:type="IVL_TS">
+                        <low value="20251103"/>
+                        <high nullFlavor="UNK"/>
+                     </effectiveTime>
+                     <routeCode code="C38288" codeSystem="2.16.840.1.113883.3.26.1.1" codeSystemName="NCI Thesaurus" displayName="ORAL"/>
+                     <doseQuantity nullFlavor="NI"/>
+                     <consumable>
+                        <manufacturedProduct classCode="MANU">
+                           <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.4.23"/>
+                           <templateId root="2.16.840.1.113883.10.20.22.4.23"/>
+                           <id root="3669c1c9-91f7-33c5-9c8b-ee14aacf503e"/>
+                           <manufacturedMaterial>
+                              <code code="312593" codeSystem="2.16.840.1.113883.6.88" codeSystemName="RxNorm" displayName="prazosin 1 mg capsule"/>
+                           </manufacturedMaterial>
+                        </manufacturedProduct>
+                     </consumable>
+                     <author>
+                        <templateId root="2.16.840.1.113883.10.20.22.4.119"/>
+                        <time value="202511030142-0800"/>
+                        <assignedAuthor>
+                           <id root="2.16.840.1.113883.4.6"/>
+                           <assignedPerson>
+                              <name>
+                                 <prefix>Dr. </prefix>
+                                 <given>Sofia</given>
+                                 <family>Elkind</family>
+                              </name>
+                           </assignedPerson>
+                           <representedOrganization>
+                              <id root="2.16.840.1.113883.19.5"/>
+                              <name>Sofia Elkind MD</name>
+                           </representedOrganization>
+                        </assignedAuthor>
+                     </author>
+                  </substanceAdministration>
+               </entry>
+               <entry>
+                  <substanceAdministration classCode="SBADM" moodCode="INT">
+                     <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.4.16"/>
+                     <templateId root="2.16.840.1.113883.10.20.22.4.16"/>
+                     <id root="036a3a03-4e27-3bae-8cea-1b49f9191387"/>
+                     <text>
+                        <reference value="#Medication6"/>
+                        1 capsule(s) once a day in the morning, oral route
+                     </text>
+                     <statusCode code="active"/>
+                     <effectiveTime xsi:type="IVL_TS">
+                        <low value="20250807"/>
+                        <high nullFlavor="UNK"/>
+                     </effectiveTime>
+                     <routeCode code="C38288" codeSystem="2.16.840.1.113883.3.26.1.1" codeSystemName="NCI Thesaurus" displayName="ORAL"/>
+                     <doseQuantity value="1"/>
+                     <consumable>
+                        <manufacturedProduct classCode="MANU">
+                           <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.4.23"/>
+                           <templateId root="2.16.840.1.113883.10.20.22.4.23"/>
+                           <id root="31d11c4c-827c-38d6-bce0-5c28fb09f5c7"/>
+                           <manufacturedMaterial>
+                              <code code="310385" codeSystem="2.16.840.1.113883.6.88" codeSystemName="RxNorm" displayName="FLUoxetine 20 mg capsule"/>
+                           </manufacturedMaterial>
+                        </manufacturedProduct>
+                     </consumable>
+                     <author>
+                        <templateId root="2.16.840.1.113883.10.20.22.4.119"/>
+                        <time value="202508071025-0700"/>
+                        <assignedAuthor>
+                           <id root="2.16.840.1.113883.4.6"/>
+                           <assignedPerson>
+                              <name>
+                                 <prefix>Dr. </prefix>
+                                 <given>Sofia</given>
+                                 <family>Elkind</family>
+                              </name>
+                           </assignedPerson>
+                           <representedOrganization>
+                              <id root="2.16.840.1.113883.19.5"/>
+                              <name>Sofia Elkind MD</name>
+                           </representedOrganization>
+                        </assignedAuthor>
+                     </author>
+                  </substanceAdministration>
+               </entry>
+            </section>
+         </component>
+         <component>
+            <section>
+               <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.2.14"/>
+               <templateId root="2.16.840.1.113883.10.20.22.2.14"/>
+               <code code="47420-5" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC" displayName="Functional Status"/>
+               <title>Functional Status</title>
+               <text>No information</text>
+            </section>
+         </component>
+         <component>
+            <section>
+               <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.2.56"/>
+               <templateId root="2.16.840.1.113883.10.20.22.2.56"/>
+               <code code="10190-7" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC" displayName="MENTAL STATUS"/>
+               <title>MENTAL STATUS</title>
+               <text>No information</text>
+            </section>
+         </component>
+         <component>
+            <section>
+               <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.2.3.1"/>
+               <templateId root="2.16.840.1.113883.10.20.22.2.3.1"/>
+               <code code="30954-2" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC" displayName="RELEVANT DIAGNOSTIC TESTS AND/OR LABORATORY DATA"/>
+               <title>Lab/Image Results</title>
+               <text>No Lab/Image Results information</text>
+               <entry>
+                  <organizer classCode="BATTERY" moodCode="EVN">
+                     <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.4.1"/>
+                     <templateId root="2.16.840.1.113883.10.20.22.4.1"/>
+                     <id nullFlavor="NI"/>
+                     <code displayName="TEST_NAME" nullFlavor="NI"/>
+                     <statusCode code="completed"/>
+                     <effectiveTime>
+                        <low nullFlavor="UNK"/>
+                        <high nullFlavor="UNK"/>
+                     </effectiveTime>
+                     <component>
+                        <observation classCode="OBS" moodCode="EVN">
+                           <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.4.2"/>
+                           <templateId root="2.16.840.1.113883.10.20.22.4.2"/>
+                           <id nullFlavor="NI"/>
+                           <code nullFlavor="NI"/>
+                           <statusCode code="completed"/>
+                           <effectiveTime>
+                              <low nullFlavor="UNK"/>
+                           </effectiveTime>
+                           <value nullFlavor="NI" xsi:type="ST"/>
+                        </observation>
+                     </component>
+                  </organizer>
+               </entry>
+            </section>
+         </component>
+         <component>
+            <section>
+               <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.2.2.1"/>
+               <templateId root="2.16.840.1.113883.10.20.22.2.2.1"/>
+               <code code="11369-6" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC" displayName="History of immunizations"/>
+               <title>Immunizations</title>
+               <text>No known immunization history</text>
+               <entry>
+                  <substanceAdministration classCode="SBADM" moodCode="EVN" negationInd="false">
+                     <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.4.52"/>
+                     <templateId root="2.16.840.1.113883.10.20.22.4.52"/>
+                     <id nullFlavor="NI"/>
+                     <statusCode code="completed"/>
+                     <effectiveTime nullFlavor="NI" xsi:type="IVL_TS"/>
+                     <consumable>
+                        <manufacturedProduct classCode="MANU">
+                           <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.4.54"/>
+                           <templateId root="2.16.840.1.113883.10.20.22.4.54"/>
+                           <manufacturedMaterial>
+                              <code nullFlavor="NI"/>
+                              <lotNumberText nullFlavor="NI"/>
+                           </manufacturedMaterial>
+                        </manufacturedProduct>
+                     </consumable>
+                  </substanceAdministration>
+               </entry>
+            </section>
+         </component>
+         <component>
+            <section>
+               <templateId root="2.16.840.1.113883.10.20.22.2.7.1"/>
+               <code code="47519-4" codeSystem="2.16.840.1.113883.6.1"/>
+               <title>Procedures</title>
+               <text>No Procedure information</text>
+               <entry>
+                  <procedure classCode="PROC" moodCode="EVN">
+                     <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.4.14"/>
+                     <templateId root="2.16.840.1.113883.10.20.22.4.14"/>
+                     <id nullFlavor="NI"/>
+                     <code nullFlavor="NI"/>
+                     <statusCode code="completed"/>
+                  </procedure>
+               </entry>
+            </section>
+         </component>
+         <component>
+            <section>
+               <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.2.22.1"/>
+               <templateId root="2.16.840.1.113883.10.20.22.2.22.1"/>
+               <code code="46240-8" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC" displayName="History of encounters"/>
+               <title>Encounter Diagnosis</title>
+               <text>No records available</text>
+               <entry>
+                  <encounter classCode="ENC" moodCode="EVN">
+                     <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.4.49"/>
+                     <templateId root="2.16.840.1.113883.10.20.22.4.49"/>
+                     <id nullFlavor="NI"/>
+                     <code/>
+                     <effectiveTime>
+                        <low nullFlavor="UNK"/>
+                     </effectiveTime>
+                     <entryRelationship typeCode="SUBJ">
+                        <act classCode="ACT" moodCode="EVN">
+                           <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.4.80"/>
+                           <templateId root="2.16.840.1.113883.10.20.22.4.80"/>
+                           <code code="29308-4" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC" xsi:type="CE"/>
+                           <entryRelationship typeCode="SUBJ">
+                              <observation classCode="OBS" moodCode="EVN">
+                                 <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.4.4"/>
+                                 <templateId root="2.16.840.1.113883.10.20.22.4.4"/>
+                                 <id nullFlavor="NI"/>
+                                 <code nullFlavor="NI">
+                                    <translation nullFlavor="NI"/>
+                                 </code>
+                                 <statusCode code="completed"/>
+                                 <effectiveTime>
+                                    <low nullFlavor="UNK"/>
+                                 </effectiveTime>
+                                 <value nullFlavor="NI" xsi:type="CD"/>
+                              </observation>
+                           </entryRelationship>
+                        </act>
+                     </entryRelationship>
+                  </encounter>
+               </entry>
+            </section>
+         </component>
+         <component>
+            <section>
+               <templateId root="2.16.840.1.113883.10.20.22.2.8"/>
+               <code code="51848-0" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC" displayName="ASSESSMENTS"/>
+               <title>ASSESSMENTS</title>
+               <text>No information</text>
+            </section>
+         </component>
+         <component>
+            <section>
+               <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.2.10"/>
+               <templateId root="2.16.840.1.113883.10.20.22.2.10"/>
+               <code code="18776-5" codeSystem="2.16.840.1.113883.6.1" codeSystemName="Treatment plan"/>
+               <title>TREATMENT PLAN</title>
+               <text>No information</text>
+            </section>
+         </component>
+         <component>
+            <section>
+               <templateId root="2.16.840.1.113883.10.20.22.2.60"/>
+               <code code="61146-7" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC" displayName="Goals"/>
+               <title>Goals</title>
+               <text>No records available</text>
+               <entry>
+                  <observation classCode="OBS" moodCode="GOL">
+                     <templateId root="2.16.840.1.113883.10.20.22.4.121"/>
+                     <id nullFlavor="NI"/>
+                     <code codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC"/>
+                     <text>
+                        <reference nullFlavor="NI"/>
+                     </text>
+                     <statusCode code="active"/>
+                  </observation>
+               </entry>
+            </section>
+         </component>
+         <component>
+            <section>
+               <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.2.58"/>
+               <templateId root="2.16.840.1.113883.10.20.22.2.58"/>
+               <code code="75310-3" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC" displayName="Health Concerns Document"/>
+               <title>Health Concerns</title>
+               <text>No information</text>
+               <entry>
+                  <act classCode="ACT" moodCode="EVN">
+                     <templateId extension="2015-08-01" root="2.16.840.1.113883.10.20.22.4.132"/>
+                     <templateId root="2.16.840.1.113883.10.20.22.4.132"/>
+                     <id nullFlavor="NI"/>
+                     <code code="75310-3" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC" displayName="Health Concern"/>
+                     <statusCode code="active"/>
+                     <effectiveTime nullFlavor="NI"/>
+                  </act>
+               </entry>
+            </section>
+         </component>
+         <component>
+            <section>
+               <templateId root="2.16.840.1.113883.10.20.22.2.12"/>
+               <code code="29299-5" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC" displayName="REASON FOR VISIT"/>
+               <title> </title>
+               <text/>
+            </section>
+         </component>
+         <component>
+            <section>
+               <templateId extension="2014-06-09" root="2.16.840.1.113883.10.20.22.2.23"/>
+               <templateId root="2.16.840.1.113883.10.20.22.2.23"/>
+               <code code="46264-8" codeSystem="2.16.840.1.113883.6.1"/>
+               <title>Implants</title>
+               <text>No implanted devices</text>
+            </section>
+         </component>
+         <component>
+            <section>
+               <templateId extension="2014-06-09" root="1.3.6.1.4.1.19376.1.5.3.1.3.1"/>
+               <templateId root="1.3.6.1.4.1.19376.1.5.3.1.3.1"/>
+               <code code="42349-1" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC" displayName="REASON FOR REFERRAL"/>
+               <title>REASON FOR REFERRAL</title>
+               <text>No information</text>
+            </section>
+         </component>
+      </structuredBody>
+   </component>
+</ClinicalDocument>

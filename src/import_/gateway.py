@@ -13,6 +13,7 @@ This module handles the complete import flow:
 
 import base64
 import logging
+import re
 from datetime import date
 from typing import Any
 from uuid import UUID, uuid4
@@ -20,7 +21,11 @@ from uuid import UUID, uuid4
 from src.exceptions import ConversionError, ValidationError
 from src.import_.ccda_preprocessor import DoseRangeInfo, sanitize_ccda
 from src.import_.charm.composition_builder import build_compositions
-from src.import_.charm.extractor import CharmCcdaExtractor
+from src.import_.charm.extractor import (
+    AllergyEntry,
+    CharmCcdaExtractor,
+    MedicationEntry,
+)
 from src.import_.charm.linker import link_resources_to_encounters
 from src.import_.matching.identifier_service import (
     get_import_resource_types,
@@ -372,6 +377,27 @@ def _apply_charm_processing(
             r4_bundle, extraction_result, encounter_date_to_ref
         )
         warnings.extend(comp_warnings)
+
+        # Enrich AllergyIntolerance resources with allergen names from narrative
+        if extraction_result.allergies:
+            enrich_count = _enrich_allergies_from_narrative(
+                r4_bundle, extraction_result.allergies
+            )
+            if enrich_count > 0:
+                warnings.append(
+                    f"Enriched {enrich_count} allergies with names from narrative text"
+                )
+
+        # Enrich MedicationStatement resources with dosage from text elements
+        if extraction_result.medications:
+            dosage_count, dosage_debug = _enrich_medication_dosages(
+                r4_bundle, extraction_result.medications
+            )
+            warnings.append(f"Dosage enrichment: {dosage_debug}")
+            if dosage_count > 0:
+                warnings.append(
+                    f"Enriched {dosage_count} medications with dosage from text"
+                )
 
     except Exception as e:
         warnings.append(f"CHARM processing error (non-fatal): {e}")
@@ -869,20 +895,39 @@ def _get_medication_code_from_statement(
     """
     Extract the medication code (RxNorm) from a MedicationStatement.
 
-    The code can be inline in medication.concept or referenced via medication.reference.
+    Handles both R4 and R5 structures:
+    - R4: medicationCodeableConcept or medicationReference
+    - R5: medication.concept or medication.reference
     """
-    medication = med_statement.get("medication", {})
-
-    # Check inline concept first
-    concept = medication.get("concept", {})
-    for coding in concept.get("coding", []):
+    # R4: Check medicationCodeableConcept
+    med_concept = med_statement.get("medicationCodeableConcept", {})
+    for coding in med_concept.get("coding", []):
         code: str | None = coding.get("code")
         if code:
             return code
 
-    # Check reference to Medication resource
-    reference = medication.get("reference", {})
-    ref_str = reference.get("reference") if isinstance(reference, dict) else reference
+    # R5: Check medication.concept
+    medication = med_statement.get("medication", {})
+    concept = medication.get("concept", {})
+    for coding in concept.get("coding", []):
+        code = coding.get("code")
+        if code:
+            return code
+
+    # R4: Check medicationReference
+    med_ref = med_statement.get("medicationReference", {})
+    ref_str: str | None = None
+    if isinstance(med_ref, dict):
+        ref_str = med_ref.get("reference")
+    elif isinstance(med_ref, str):
+        ref_str = med_ref
+
+    # R5: Check medication.reference
+    if not ref_str:
+        reference = medication.get("reference", {})
+        ref_str = (
+            reference.get("reference") if isinstance(reference, dict) else reference
+        )
 
     if ref_str:
         # Find the referenced Medication in the bundle
@@ -908,6 +953,216 @@ def _get_medication_code_from_statement(
                         return med_code
 
     return None
+
+
+def _enrich_allergies_from_narrative(
+    bundle: dict[str, Any],
+    extracted_allergies: list[AllergyEntry],
+) -> int:
+    """
+    Enrich AllergyIntolerance resources with allergen names from narrative text.
+
+    CHARM exports allergen names only in narrative text, not structured data.
+    MS Converter creates AllergyIntolerance resources with missing codes.
+    This function adds the allergen name from the extracted narrative table.
+
+    Args:
+        bundle: The FHIR bundle to enrich
+        extracted_allergies: Allergies extracted from C-CDA narrative text
+
+    Returns:
+        Number of allergies enriched
+    """
+    enriched_count = 0
+
+    # Get all AllergyIntolerance resources
+    allergy_entries = [
+        entry
+        for entry in bundle.get("entry", [])
+        if entry.get("resource", {}).get("resourceType") == "AllergyIntolerance"
+    ]
+
+    # Match by index - narrative table order matches structured entry order
+    for i, entry in enumerate(allergy_entries):
+        if i >= len(extracted_allergies):
+            break
+
+        resource = entry.get("resource", {})
+        extracted = extracted_allergies[i]
+
+        # Check if this resource needs enrichment (no code/coding)
+        code = resource.get("code", {})
+        codings = code.get("coding", [])
+        existing_text = code.get("text", "")
+
+        if not codings and not existing_text:
+            # Add allergen name from narrative
+            resource["code"] = {
+                "text": extracted.allergen,
+            }
+
+            # Add reaction text if available
+            if extracted.reaction and "reaction" not in resource:
+                resource["reaction"] = [
+                    {
+                        "manifestation": [
+                            {
+                                "concept": {
+                                    "text": extracted.reaction,
+                                }
+                            }
+                        ]
+                    }
+                ]
+
+                # Add severity if available
+                if extracted.severity:
+                    severity_code = _map_severity_to_code(extracted.severity)
+                    if severity_code:
+                        resource["reaction"][0]["severity"] = severity_code
+
+            enriched_count += 1
+
+    return enriched_count
+
+
+def _map_severity_to_code(severity_text: str) -> str | None:
+    """Map severity text to FHIR severity code."""
+    severity_lower = severity_text.lower()
+    if "mild" in severity_lower:
+        return "mild"
+    elif "moderate" in severity_lower:
+        return "moderate"
+    elif "severe" in severity_lower:
+        return "severe"
+    return None
+
+
+def _parse_dosage_text(dosage_text: str) -> dict[str, Any] | None:
+    """
+    Parse a dosage text string to extract quantity and unit.
+
+    Examples:
+    - "1 cap by mouth every evening" -> {"value": 1, "unit": "cap"}
+    - "100 mg daily" -> {"value": 100, "unit": "mg"}
+    - "2 tablets twice daily" -> {"value": 2, "unit": "tablets"}
+
+    Returns None if the dosage text cannot be parsed.
+    """
+    # Pattern: starts with a number, optionally followed by a unit
+    # Matches: "1 cap", "100 mg", "2 tablets", "0.5 ml", etc.
+    pattern = r"^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?"
+    match = re.match(pattern, dosage_text.strip())
+
+    if not match:
+        return None
+
+    value_str, unit = match.groups()
+    try:
+        value = float(value_str)
+        # Convert to int if it's a whole number
+        if value == int(value):
+            value = int(value)
+    except ValueError:
+        return None
+
+    result: dict[str, Any] = {"value": value}
+    if unit:
+        result["unit"] = unit
+
+    return result
+
+
+def _enrich_medication_dosages(
+    bundle: dict[str, Any],
+    extracted_medications: list[MedicationEntry],
+) -> tuple[int, str]:
+    """
+    Enrich MedicationStatement resources with dosage text from C-CDA.
+
+    CHARM exports dosage instructions in the <text> element but MS Converter
+    may not always extract it to the FHIR dosage field.
+
+    Args:
+        bundle: The FHIR bundle to enrich
+        extracted_medications: Medications extracted from C-CDA
+
+    Returns:
+        Tuple of (number enriched, debug string)
+    """
+    enriched_count = 0
+    debug_info: list[str] = []
+
+    # Build a map from RxNorm code to dosage for quick lookup
+    code_to_dosage: dict[str, str] = {}
+    for med in extracted_medications:
+        if med.code and med.dosage:
+            if med.code not in code_to_dosage:
+                code_to_dosage[med.code] = med.dosage
+
+    debug_info.append(f"codes_with_dosage={list(code_to_dosage.keys())}")
+
+    # Find all MedicationStatement resources
+    med_statements_found = 0
+    codes_found: list[str] = []
+    skipped_has_text = 0
+    no_code = 0
+
+    for entry in bundle.get("entry", []):
+        resource = entry.get("resource", {})
+        if resource.get("resourceType") != "MedicationStatement":
+            continue
+
+        med_statements_found += 1
+
+        # Check if this resource already has dosage with text
+        existing_dosage = resource.get("dosage", [])
+        if existing_dosage:
+            has_text = any(d.get("text") for d in existing_dosage)
+            if has_text:
+                skipped_has_text += 1
+                continue
+
+        # Get the medication code from the resource
+        med_code = _get_medication_code_from_statement(resource, bundle)
+        if med_code:
+            codes_found.append(med_code)
+        if not med_code:
+            no_code += 1
+            continue
+
+        # Look up dosage from extracted medications
+        dosage_text = code_to_dosage.get(med_code)
+        if not dosage_text:
+            continue
+
+        # Parse dosage text into structured format for UI compatibility
+        parsed_dose = _parse_dosage_text(dosage_text)
+
+        # Build the dosage object
+        dosage_obj: dict[str, Any] = {"text": dosage_text}
+
+        if parsed_dose:
+            dose_quantity: dict[str, Any] = {"value": parsed_dose["value"]}
+            if parsed_dose.get("unit"):
+                dose_quantity["unit"] = parsed_dose["unit"]
+            dosage_obj["doseAndRate"] = [{"doseQuantity": dose_quantity}]
+
+        # Add or update dosage
+        if existing_dosage:
+            existing_dosage[0].update(dosage_obj)
+        else:
+            resource["dosage"] = [dosage_obj]
+
+        enriched_count += 1
+
+    debug_info.append(f"statements={med_statements_found}")
+    debug_info.append(f"codes_found={codes_found}")
+    debug_info.append(f"skipped_has_text={skipped_has_text}")
+    debug_info.append(f"no_code={no_code}")
+    debug_info.append(f"enriched={enriched_count}")
+
+    return enriched_count, "; ".join(debug_info)
 
 
 def _filter_nkda_allergies(bundle: dict[str, Any]) -> int:
