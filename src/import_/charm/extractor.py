@@ -542,13 +542,21 @@ class CharmCcdaExtractor:
         code = code_elem.get("code")
         display = code_elem.get("displayName")
 
-        # Get dosage info
+        # Get dosage info - try doseQuantity first, then fall back to text element
         dosage = None
         dose_elem = self._find("cda:doseQuantity", subst_admin)
         if dose_elem is not None:
             dose_value = dose_elem.get("value")
             if dose_value:
                 dosage = dose_value
+
+        # If no structured dosage, try the text element (CHARM puts dosage instructions there)
+        if not dosage:
+            text_elem = self._find("cda:text", subst_admin)
+            if text_elem is not None:
+                dosage_text = self._get_element_text(text_elem)
+                if dosage_text:
+                    dosage = dosage_text
 
         # Get route
         route = None

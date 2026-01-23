@@ -20,7 +20,11 @@ from uuid import UUID, uuid4
 from src.exceptions import ConversionError, ValidationError
 from src.import_.ccda_preprocessor import DoseRangeInfo, sanitize_ccda
 from src.import_.charm.composition_builder import build_compositions
-from src.import_.charm.extractor import AllergyEntry, CharmCcdaExtractor
+from src.import_.charm.extractor import (
+    AllergyEntry,
+    CharmCcdaExtractor,
+    MedicationEntry,
+)
 from src.import_.charm.linker import link_resources_to_encounters
 from src.import_.matching.identifier_service import (
     get_import_resource_types,
@@ -381,6 +385,16 @@ def _apply_charm_processing(
             if enrich_count > 0:
                 warnings.append(
                     f"Enriched {enrich_count} allergies with names from narrative text"
+                )
+
+        # Enrich MedicationStatement resources with dosage from text elements
+        if extraction_result.medications:
+            dosage_count = _enrich_medication_dosages(
+                r4_bundle, extraction_result.medications
+            )
+            if dosage_count > 0:
+                warnings.append(
+                    f"Enriched {dosage_count} medications with dosage from text"
                 )
 
     except Exception as e:
@@ -1001,6 +1015,71 @@ def _map_severity_to_code(severity_text: str) -> str | None:
     elif "severe" in severity_lower:
         return "severe"
     return None
+
+
+def _enrich_medication_dosages(
+    bundle: dict[str, Any],
+    extracted_medications: list[MedicationEntry],
+) -> int:
+    """
+    Enrich MedicationStatement resources with dosage text from C-CDA.
+
+    CHARM exports dosage instructions in the <text> element but MS Converter
+    may not always extract it to the FHIR dosage field.
+
+    Args:
+        bundle: The FHIR bundle to enrich
+        extracted_medications: Medications extracted from C-CDA
+
+    Returns:
+        Number of medications enriched with dosage
+    """
+    enriched_count = 0
+
+    # Build a map from RxNorm code to dosage for quick lookup
+    code_to_dosage: dict[str, str] = {}
+    for med in extracted_medications:
+        if med.code and med.dosage:
+            # Store dosage keyed by RxNorm code
+            # If there are multiple entries with the same code, keep the first
+            if med.code not in code_to_dosage:
+                code_to_dosage[med.code] = med.dosage
+
+    # Find all MedicationStatement resources
+    for entry in bundle.get("entry", []):
+        resource = entry.get("resource", {})
+        if resource.get("resourceType") != "MedicationStatement":
+            continue
+
+        # Check if this resource already has dosage
+        existing_dosage = resource.get("dosage", [])
+        if existing_dosage:
+            # Check if any dosage entry has text
+            has_text = any(d.get("text") for d in existing_dosage)
+            if has_text:
+                continue
+
+        # Get the medication code from the resource
+        med_code = _get_medication_code_from_statement(resource, bundle)
+        if not med_code:
+            continue
+
+        # Look up dosage from extracted medications
+        dosage_text = code_to_dosage.get(med_code)
+        if not dosage_text:
+            continue
+
+        # Add or update dosage
+        if existing_dosage:
+            # Add text to existing dosage entry
+            existing_dosage[0]["text"] = dosage_text
+        else:
+            # Create new dosage entry
+            resource["dosage"] = [{"text": dosage_text}]
+
+        enriched_count += 1
+
+    return enriched_count
 
 
 def _filter_nkda_allergies(bundle: dict[str, Any]) -> int:
