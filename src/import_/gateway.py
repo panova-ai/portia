@@ -20,7 +20,7 @@ from uuid import UUID, uuid4
 from src.exceptions import ConversionError, ValidationError
 from src.import_.ccda_preprocessor import DoseRangeInfo, sanitize_ccda
 from src.import_.charm.composition_builder import build_compositions
-from src.import_.charm.extractor import CharmCcdaExtractor
+from src.import_.charm.extractor import AllergyEntry, CharmCcdaExtractor
 from src.import_.charm.linker import link_resources_to_encounters
 from src.import_.matching.identifier_service import (
     get_import_resource_types,
@@ -372,6 +372,16 @@ def _apply_charm_processing(
             r4_bundle, extraction_result, encounter_date_to_ref
         )
         warnings.extend(comp_warnings)
+
+        # Enrich AllergyIntolerance resources with allergen names from narrative
+        if extraction_result.allergies:
+            enrich_count = _enrich_allergies_from_narrative(
+                r4_bundle, extraction_result.allergies
+            )
+            if enrich_count > 0:
+                warnings.append(
+                    f"Enriched {enrich_count} allergies with names from narrative text"
+                )
 
     except Exception as e:
         warnings.append(f"CHARM processing error (non-fatal): {e}")
@@ -907,6 +917,89 @@ def _get_medication_code_from_statement(
                     if med_code:
                         return med_code
 
+    return None
+
+
+def _enrich_allergies_from_narrative(
+    bundle: dict[str, Any],
+    extracted_allergies: list[AllergyEntry],
+) -> int:
+    """
+    Enrich AllergyIntolerance resources with allergen names from narrative text.
+
+    CHARM exports allergen names only in narrative text, not structured data.
+    MS Converter creates AllergyIntolerance resources with missing codes.
+    This function adds the allergen name from the extracted narrative table.
+
+    Args:
+        bundle: The FHIR bundle to enrich
+        extracted_allergies: Allergies extracted from C-CDA narrative text
+
+    Returns:
+        Number of allergies enriched
+    """
+    enriched_count = 0
+
+    # Get all AllergyIntolerance resources
+    allergy_entries = [
+        entry
+        for entry in bundle.get("entry", [])
+        if entry.get("resource", {}).get("resourceType") == "AllergyIntolerance"
+    ]
+
+    # Match by index - narrative table order matches structured entry order
+    for i, entry in enumerate(allergy_entries):
+        if i >= len(extracted_allergies):
+            break
+
+        resource = entry.get("resource", {})
+        extracted = extracted_allergies[i]
+
+        # Check if this resource needs enrichment (no code/coding)
+        code = resource.get("code", {})
+        codings = code.get("coding", [])
+        existing_text = code.get("text", "")
+
+        if not codings and not existing_text:
+            # Add allergen name from narrative
+            resource["code"] = {
+                "text": extracted.allergen,
+            }
+
+            # Add reaction text if available
+            if extracted.reaction and "reaction" not in resource:
+                resource["reaction"] = [
+                    {
+                        "manifestation": [
+                            {
+                                "concept": {
+                                    "text": extracted.reaction,
+                                }
+                            }
+                        ]
+                    }
+                ]
+
+                # Add severity if available
+                if extracted.severity:
+                    severity_code = _map_severity_to_code(extracted.severity)
+                    if severity_code:
+                        resource["reaction"][0]["severity"] = severity_code
+
+            enriched_count += 1
+
+    return enriched_count
+
+
+def _map_severity_to_code(severity_text: str) -> str | None:
+    """Map severity text to FHIR severity code."""
+    severity_lower = severity_text.lower()
+    if "mild" in severity_lower:
+        return "mild"
+    elif "moderate" in severity_lower:
+        return "moderate"
+    elif "severe" in severity_lower:
+        return "severe"
     return None
 
 

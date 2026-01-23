@@ -54,6 +54,17 @@ class MedicationEntry:
 
 
 @dataclass
+class AllergyEntry:
+    """An allergy entry extracted from narrative text."""
+
+    allergen: str  # Name of the allergen (e.g., "sertraline")
+    status: str | None  # e.g., "Active"
+    reaction: str | None  # e.g., "itching, hives"
+    severity: str | None  # e.g., "Mild"
+    date: str | None  # Date string as found in the table
+
+
+@dataclass
 class EncounterData:
     """Data for a synthesized encounter from CHARM export."""
 
@@ -106,6 +117,9 @@ class CharmExtractionResult:
     # All clinical notes
     notes: list[ClinicalNote]
 
+    # All allergies (extracted from narrative text)
+    allergies: list[AllergyEntry] = field(default_factory=list)
+
 
 class CharmCcdaExtractor:
     """Extracts structured data from CHARM C-CDA exports."""
@@ -128,6 +142,7 @@ class CharmCcdaExtractor:
         notes = self._extract_notes()
         problems = self._extract_problems()
         medications = self._extract_medications()
+        allergies = self._extract_allergies()
 
         # Synthesize encounters from notes (each unique date = one encounter)
         encounters = self._synthesize_encounters(notes, problems, medications)
@@ -142,6 +157,7 @@ class CharmCcdaExtractor:
             problems=problems,
             medications=medications,
             notes=notes,
+            allergies=allergies,
         )
 
     def _find(self, path: str, element: Element | None = None) -> Element | None:
@@ -552,6 +568,70 @@ class CharmCcdaExtractor:
             route=route,
             ccda_id=ccda_id or "",
         )
+
+    def _extract_allergies(self) -> list[AllergyEntry]:
+        """Extract allergies from the Allergies section narrative table.
+
+        CHARM exports allergen names only in the narrative text table, not in
+        structured data. This method parses the HTML table to recover allergen info.
+        """
+        allergies: list[AllergyEntry] = []
+
+        # Find the Allergies section by LOINC code
+        for section in self._findall(".//cda:component/cda:section"):
+            code = self._find("cda:code", section)
+            # LOINC code for allergies
+            if code is not None and code.get("code") == "48765-2":
+                # Found allergies section - parse the narrative table
+                allergies.extend(self._parse_allergies_table(section))
+                break
+
+        return allergies
+
+    def _parse_allergies_table(self, section: Element) -> list[AllergyEntry]:
+        """Parse allergies from the HTML table in the section text.
+
+        Table format: Allergen | Status | Reaction | Severity | Date
+        """
+        allergies: list[AllergyEntry] = []
+
+        text_elem = self._find("cda:text", section)
+        if text_elem is None:
+            return allergies
+
+        # Find all tr elements (table rows)
+        for tr in (
+            self._findall(".//cda:tr", text_elem)
+            or text_elem.findall(".//{http://www.w3.org/1999/xhtml}tr")
+            or text_elem.findall(".//tr")
+        ):
+            tds = (
+                self._findall("cda:td", tr)
+                or tr.findall("{http://www.w3.org/1999/xhtml}td")
+                or tr.findall("td")
+            )
+
+            if len(tds) >= 5:
+                # Format: Allergen | Status | Reaction | Severity | Date
+                allergen = self._get_element_text(tds[0])
+                status = self._get_element_text(tds[1])
+                reaction = self._get_element_text(tds[2])
+                severity = self._get_element_text(tds[3])
+                date_text = self._get_element_text(tds[4])
+
+                # Skip header rows or empty allergens
+                if allergen and allergen.lower() not in ["allergen", ""]:
+                    allergies.append(
+                        AllergyEntry(
+                            allergen=allergen,
+                            status=status or None,
+                            reaction=reaction or None,
+                            severity=severity or None,
+                            date=date_text or None,
+                        )
+                    )
+
+        return allergies
 
     def _synthesize_encounters(
         self,
