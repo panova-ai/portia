@@ -389,9 +389,10 @@ def _apply_charm_processing(
 
         # Enrich MedicationStatement resources with dosage from text elements
         if extraction_result.medications:
-            dosage_count = _enrich_medication_dosages(
+            dosage_count, dosage_debug = _enrich_medication_dosages(
                 r4_bundle, extraction_result.medications
             )
+            warnings.append(f"Dosage enrichment: {dosage_debug}")
             if dosage_count > 0:
                 warnings.append(
                     f"Enriched {dosage_count} medications with dosage from text"
@@ -1020,7 +1021,7 @@ def _map_severity_to_code(severity_text: str) -> str | None:
 def _enrich_medication_dosages(
     bundle: dict[str, Any],
     extracted_medications: list[MedicationEntry],
-) -> int:
+) -> tuple[int, str]:
     """
     Enrich MedicationStatement resources with dosage text from C-CDA.
 
@@ -1032,23 +1033,26 @@ def _enrich_medication_dosages(
         extracted_medications: Medications extracted from C-CDA
 
     Returns:
-        Number of medications enriched with dosage
+        Tuple of (number enriched, debug string)
     """
     enriched_count = 0
+    debug_info: list[str] = []
 
     # Build a map from RxNorm code to dosage for quick lookup
     code_to_dosage: dict[str, str] = {}
     for med in extracted_medications:
         if med.code and med.dosage:
-            # Store dosage keyed by RxNorm code
-            # If there are multiple entries with the same code, keep the first
             if med.code not in code_to_dosage:
                 code_to_dosage[med.code] = med.dosage
 
-    logger.info(f"Medication dosage map: {code_to_dosage}")
+    debug_info.append(f"codes_with_dosage={list(code_to_dosage.keys())}")
 
     # Find all MedicationStatement resources
     med_statements_found = 0
+    codes_found: list[str] = []
+    skipped_has_text = 0
+    no_code = 0
+
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
         if resource.get("resourceType") != "MedicationStatement":
@@ -1061,38 +1065,37 @@ def _enrich_medication_dosages(
         if existing_dosage:
             has_text = any(d.get("text") for d in existing_dosage)
             if has_text:
-                logger.info("MedicationStatement already has dosage text, skipping")
+                skipped_has_text += 1
                 continue
 
         # Get the medication code from the resource
         med_code = _get_medication_code_from_statement(resource, bundle)
-        logger.info(f"MedicationStatement med_code: {med_code}")
+        if med_code:
+            codes_found.append(med_code)
         if not med_code:
-            logger.info("Could not extract medication code from MedicationStatement")
+            no_code += 1
             continue
 
         # Look up dosage from extracted medications
         dosage_text = code_to_dosage.get(med_code)
         if not dosage_text:
-            logger.info(f"No dosage found for code {med_code}")
             continue
 
         # Add or update dosage
         if existing_dosage:
-            # Add text to existing dosage entry
             existing_dosage[0]["text"] = dosage_text
         else:
-            # Create new dosage entry
             resource["dosage"] = [{"text": dosage_text}]
 
-        logger.info(f"Enriched medication {med_code} with dosage: {dosage_text}")
         enriched_count += 1
 
-    logger.info(
-        f"Found {med_statements_found} MedicationStatements, enriched {enriched_count}"
-    )
+    debug_info.append(f"statements={med_statements_found}")
+    debug_info.append(f"codes_found={codes_found}")
+    debug_info.append(f"skipped_has_text={skipped_has_text}")
+    debug_info.append(f"no_code={no_code}")
+    debug_info.append(f"enriched={enriched_count}")
 
-    return enriched_count
+    return enriched_count, "; ".join(debug_info)
 
 
 def _filter_nkda_allergies(bundle: dict[str, Any]) -> int:
