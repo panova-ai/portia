@@ -13,6 +13,7 @@ This module handles the complete import flow:
 
 import base64
 import logging
+import re
 from datetime import date
 from typing import Any
 from uuid import UUID, uuid4
@@ -1037,6 +1038,41 @@ def _map_severity_to_code(severity_text: str) -> str | None:
     return None
 
 
+def _parse_dosage_text(dosage_text: str) -> dict[str, Any] | None:
+    """
+    Parse a dosage text string to extract quantity and unit.
+
+    Examples:
+    - "1 cap by mouth every evening" -> {"value": 1, "unit": "cap"}
+    - "100 mg daily" -> {"value": 100, "unit": "mg"}
+    - "2 tablets twice daily" -> {"value": 2, "unit": "tablets"}
+
+    Returns None if the dosage text cannot be parsed.
+    """
+    # Pattern: starts with a number, optionally followed by a unit
+    # Matches: "1 cap", "100 mg", "2 tablets", "0.5 ml", etc.
+    pattern = r"^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?"
+    match = re.match(pattern, dosage_text.strip())
+
+    if not match:
+        return None
+
+    value_str, unit = match.groups()
+    try:
+        value = float(value_str)
+        # Convert to int if it's a whole number
+        if value == int(value):
+            value = int(value)
+    except ValueError:
+        return None
+
+    result: dict[str, Any] = {"value": value}
+    if unit:
+        result["unit"] = unit
+
+    return result
+
+
 def _enrich_medication_dosages(
     bundle: dict[str, Any],
     extracted_medications: list[MedicationEntry],
@@ -1100,11 +1136,23 @@ def _enrich_medication_dosages(
         if not dosage_text:
             continue
 
+        # Parse dosage text into structured format for UI compatibility
+        parsed_dose = _parse_dosage_text(dosage_text)
+
+        # Build the dosage object
+        dosage_obj: dict[str, Any] = {"text": dosage_text}
+
+        if parsed_dose:
+            dose_quantity: dict[str, Any] = {"value": parsed_dose["value"]}
+            if parsed_dose.get("unit"):
+                dose_quantity["unit"] = parsed_dose["unit"]
+            dosage_obj["doseAndRate"] = [{"doseQuantity": dose_quantity}]
+
         # Add or update dosage
         if existing_dosage:
-            existing_dosage[0]["text"] = dosage_text
+            existing_dosage[0].update(dosage_obj)
         else:
-            resource["dosage"] = [{"text": dosage_text}]
+            resource["dosage"] = [dosage_obj]
 
         enriched_count += 1
 
