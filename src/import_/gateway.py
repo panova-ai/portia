@@ -894,20 +894,39 @@ def _get_medication_code_from_statement(
     """
     Extract the medication code (RxNorm) from a MedicationStatement.
 
-    The code can be inline in medication.concept or referenced via medication.reference.
+    Handles both R4 and R5 structures:
+    - R4: medicationCodeableConcept or medicationReference
+    - R5: medication.concept or medication.reference
     """
-    medication = med_statement.get("medication", {})
-
-    # Check inline concept first
-    concept = medication.get("concept", {})
-    for coding in concept.get("coding", []):
+    # R4: Check medicationCodeableConcept
+    med_concept = med_statement.get("medicationCodeableConcept", {})
+    for coding in med_concept.get("coding", []):
         code: str | None = coding.get("code")
         if code:
             return code
 
-    # Check reference to Medication resource
-    reference = medication.get("reference", {})
-    ref_str = reference.get("reference") if isinstance(reference, dict) else reference
+    # R5: Check medication.concept
+    medication = med_statement.get("medication", {})
+    concept = medication.get("concept", {})
+    for coding in concept.get("coding", []):
+        code = coding.get("code")
+        if code:
+            return code
+
+    # R4: Check medicationReference
+    med_ref = med_statement.get("medicationReference", {})
+    ref_str: str | None = None
+    if isinstance(med_ref, dict):
+        ref_str = med_ref.get("reference")
+    elif isinstance(med_ref, str):
+        ref_str = med_ref
+
+    # R5: Check medication.reference
+    if not ref_str:
+        reference = medication.get("reference", {})
+        ref_str = (
+            reference.get("reference") if isinstance(reference, dict) else reference
+        )
 
     if ref_str:
         # Find the referenced Medication in the bundle
