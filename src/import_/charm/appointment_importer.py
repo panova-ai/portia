@@ -386,11 +386,22 @@ async def _create_import_encounter(
             }
         )
 
+    # Generate a UUID for fullUrl tracking
+    import uuid as uuid_module
+
+    encounter_uuid = uuid_module.uuid4()
+
     # Create a bundle with just this encounter
+    # Include fullUrl so the ID mapping is populated after persist
     bundle: dict[str, Any] = {
         "resourceType": "Bundle",
         "type": "collection",
-        "entry": [{"resource": encounter}],
+        "entry": [
+            {
+                "fullUrl": f"urn:uuid:{encounter_uuid}",
+                "resource": encounter,
+            }
+        ],
     }
 
     # Persist to FHIR store
