@@ -411,7 +411,23 @@ async def _create_import_encounter(
         raise ValueError(f"Failed to create encounter: {result.errors}")
 
     # Extract the created encounter ID from the id_mapping
+    logger.info(
+        "persist_bundle result: success=%s, created=%s, id_mapping=%s",
+        result.success,
+        result.resources_created,
+        result.id_mapping,
+    )
+
     for full_url, resource_id in result.id_mapping.items():
-        return UUID(resource_id)
+        logger.info(
+            "Extracting encounter ID from full_url=%s, resource_id=%s",
+            full_url,
+            resource_id,
+        )
+        try:
+            return UUID(resource_id)
+        except ValueError as e:
+            logger.error("Failed to parse resource_id '%s' as UUID: %s", resource_id, e)
+            raise ValueError(f"Invalid encounter ID format: {resource_id}") from e
 
     raise ValueError("Encounter created but ID not returned")
