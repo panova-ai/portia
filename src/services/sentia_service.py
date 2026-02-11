@@ -6,12 +6,22 @@ organizations from a Firebase token, avoiding duplication of
 database tables and lookup logic.
 """
 
+from datetime import datetime
+from typing import Optional
 from uuid import UUID
 
 import httpx
 from pydantic import BaseModel
 
 from src.settings import settings
+
+
+class AppointmentImportResult(BaseModel):
+    """Result from Sentia appointment import endpoint."""
+
+    encounter_id: UUID
+    gcal_event_id: Optional[str] = None
+    warnings: list[str] = []
 
 
 class PractitionerContext(BaseModel):
@@ -236,3 +246,66 @@ class SentiaService:
         except Exception:
             # If we can't get the role, return None and let the import continue
             return None
+
+    async def create_imported_appointment(
+        self,
+        auth_token: str,
+        encounter_id: UUID,
+        patient_id: UUID,
+        practitioner_role_id: UUID,
+        location_id: UUID,
+        start: datetime,
+        end: datetime,
+        reason: str,
+        is_virtual: bool,
+        timezone: str,
+    ) -> AppointmentImportResult:
+        """
+        Create a GCal event for an imported appointment via Sentia.
+
+        This endpoint creates the GCal event and links it to the encounter.
+        It bypasses the 'start must be in future' validation for imports.
+
+        Args:
+            auth_token: Firebase ID token
+            encounter_id: FHIR Encounter ID (already created)
+            patient_id: FHIR Patient ID
+            practitioner_role_id: FHIR PractitionerRole ID
+            location_id: FHIR Location ID
+            start: Appointment start time
+            end: Appointment end time
+            reason: Appointment reason/description
+            is_virtual: Whether this is a virtual appointment
+            timezone: Timezone for the appointment
+
+        Returns:
+            AppointmentImportResult with GCal event ID if created
+        """
+        client = await self._get_client()
+        headers = {"Authorization": f"Bearer {auth_token}"}
+
+        payload = {
+            "encounter_id": str(encounter_id),
+            "patient_id": str(patient_id),
+            "practitioner_role_id": str(practitioner_role_id),
+            "location_id": str(location_id),
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "reason": reason,
+            "is_virtual": is_virtual,
+            "timezone": timezone,
+        }
+
+        response = await client.post(
+            "/appointments/import",
+            headers=headers,
+            json=payload,
+        )
+        response.raise_for_status()
+
+        data = response.json()
+        return AppointmentImportResult(
+            encounter_id=UUID(data["encounter_id"]),
+            gcal_event_id=data.get("gcal_event_id"),
+            warnings=data.get("warnings", []),
+        )

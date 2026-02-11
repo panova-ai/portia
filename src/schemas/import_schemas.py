@@ -18,6 +18,7 @@ class ImportFormat(str, Enum):
     CCDA = "ccda"
     HL7V2 = "hl7v2"
     FHIR_R4 = "fhir-r4"
+    CHARM_APPOINTMENTS_CSV = "charm-appointments-csv"
 
 
 class ImportStatus(str, Enum):
@@ -190,4 +191,64 @@ class ImportResponse(BaseModel):
     errors: list[str] = Field(
         default_factory=list,
         description="Errors that occurred during conversion",
+    )
+
+
+# Appointment Import Schemas
+
+
+class AppointmentImportRequest(BaseModel):
+    """Request model for importing appointments from CSV."""
+
+    data: str = Field(description="Base64-encoded CSV data")
+
+    @field_validator("data")
+    @classmethod
+    def validate_data_size(cls, v: str) -> str:
+        """Validate that the data field doesn't exceed the maximum size."""
+        if len(v) > MAX_BASE64_SIZE:
+            max_mb = MAX_IMPORT_SIZE_BYTES / (1024 * 1024)
+            raise ValueError(
+                f"Import data exceeds maximum size of {max_mb:.0f}MB. "
+                "Please split large files or contact support."
+            )
+        return v
+
+    # Context - defaults to current user's context if not provided
+    organization_id: UUID | None = Field(
+        default=None,
+        description="Target organization ID. Defaults to current user's organization.",
+    )
+    practitioner_role_id: UUID | None = Field(
+        default=None,
+        description="PractitionerRole ID for encounter participant.",
+    )
+
+
+class AppointmentImportResultSchema(BaseModel):
+    """Result of importing a single appointment."""
+
+    charm_appointment_id: str
+    success: bool
+    patient_id: UUID | None = None
+    person_id: UUID | None = None
+    encounter_id: UUID | None = None
+    gcal_event_id: str | None = None
+    error: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+
+
+class AppointmentImportResponse(BaseModel):
+    """Response from appointment import operation."""
+
+    total_rows: int = Field(description="Total number of rows in CSV")
+    successful: int = Field(description="Number of successfully imported appointments")
+    failed: int = Field(description="Number of failed imports")
+    skipped: int = Field(description="Number of skipped imports")
+    results: list[AppointmentImportResultSchema] = Field(
+        description="Per-appointment import results"
+    )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Global warnings during import",
     )
