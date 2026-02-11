@@ -290,11 +290,11 @@ def _to_patient_demographics(
 async def _get_default_location(
     fhir_store: FHIRStoreService, organization_id: UUID
 ) -> Optional[Location]:
-    """Get the default (first active) location for an organization."""
+    """Get the default (first) location for an organization."""
     # Search for locations in this organization
+    # Note: Not filtering by status since many locations don't have it set
     search_params = {
         "organization": f"Organization/{organization_id}",
-        "status": "active",
         "_count": "1",
     }
 
