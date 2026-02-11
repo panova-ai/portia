@@ -249,7 +249,7 @@ class SentiaService:
 
     async def create_imported_appointment(
         self,
-        auth_token: str,
+        auth_token: str | None,
         encounter_id: UUID,
         patient_id: UUID,
         practitioner_role_id: UUID,
@@ -259,6 +259,7 @@ class SentiaService:
         reason: str,
         is_virtual: bool,
         timezone: str,
+        service_token: str | None = None,
     ) -> AppointmentImportResult:
         """
         Create a GCal event for an imported appointment via Sentia.
@@ -266,8 +267,12 @@ class SentiaService:
         This endpoint creates the GCal event and links it to the encounter.
         It bypasses the 'start must be in future' validation for imports.
 
+        Supports two authentication modes:
+        - Firebase auth (auth_token): Uses /appointments/import endpoint
+        - Service auth (service_token): Uses /appointments/import-service endpoint
+
         Args:
-            auth_token: Firebase ID token
+            auth_token: Firebase ID token (optional if service_token provided)
             encounter_id: FHIR Encounter ID (already created)
             patient_id: FHIR Patient ID
             practitioner_role_id: FHIR PractitionerRole ID
@@ -277,12 +282,22 @@ class SentiaService:
             reason: Appointment reason/description
             is_virtual: Whether this is a virtual appointment
             timezone: Timezone for the appointment
+            service_token: Service JWT token for service-to-service auth
 
         Returns:
             AppointmentImportResult with GCal event ID if created
         """
         client = await self._get_client()
-        headers = {"Authorization": f"Bearer {auth_token}"}
+
+        # Determine endpoint and auth header based on token type
+        if service_token:
+            headers = {"Authorization": f"Bearer {service_token}"}
+            endpoint = "/appointments/import-service"
+        elif auth_token:
+            headers = {"Authorization": f"Bearer {auth_token}"}
+            endpoint = "/appointments/import"
+        else:
+            raise ValueError("Either auth_token or service_token must be provided")
 
         payload = {
             "encounter_id": str(encounter_id),
@@ -297,7 +312,7 @@ class SentiaService:
         }
 
         response = await client.post(
-            "/appointments/import",
+            endpoint,
             headers=headers,
             json=payload,
         )

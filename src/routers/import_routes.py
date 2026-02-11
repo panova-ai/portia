@@ -241,8 +241,34 @@ async def import_appointments(
             detail="Could not resolve organization_id and practitioner_role_id",
         )
 
-    # Note: auth_token is optional - without it, GCal events won't be created
-    # Service tokens can still import appointments (FHIR Encounters only)
+    # Determine which token to use for Sentia GCal event creation
+    # Firebase auth uses the raw token for user authentication
+    # Service auth creates a separate token for service-to-service communication
+    service_token: str | None = None
+    if current_user.auth_type == "service" and current_user.raw_token:
+        # For service tokens, we need to create a token that Sentia will accept
+        # The raw_token is for Portia, we need one for Sentia (audience=panova-backend)
+        from datetime import datetime, timedelta
+        from datetime import timezone as dt_timezone
+
+        import jwt
+
+        from src.core.auth import _get_service_auth_secret
+
+        now = datetime.now(dt_timezone.utc)
+        expires = now + timedelta(hours=1)
+        payload = {
+            "service_name": "portia-cli",
+            "iss": "panova-services",
+            "sub": "service:portia-cli",
+            "aud": "panova-backend",  # Sentia's audience
+            "iat": int(now.timestamp()),
+            "exp": int(expires.timestamp()),
+            "permissions": ["appointments.import"],
+        }
+        service_token = jwt.encode(
+            payload, _get_service_auth_secret(), algorithm="HS256"
+        )
 
     try:
         result = await import_appointments_from_csv(
@@ -252,6 +278,7 @@ async def import_appointments(
             fhir_store=fhir_store,
             sentia_service=sentia_service,
             auth_token=auth_token,
+            service_token=service_token,
         )
 
         return AppointmentImportResponse(

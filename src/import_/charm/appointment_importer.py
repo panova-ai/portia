@@ -72,6 +72,7 @@ async def import_appointments_from_csv(
     fhir_store: FHIRStoreService,
     sentia_service: SentiaService,
     auth_token: Optional[str] = None,
+    service_token: Optional[str] = None,
 ) -> AppointmentImportResponse:
     """
     Import appointments from Charm CSV export.
@@ -147,6 +148,7 @@ async def import_appointments_from_csv(
             fhir_store=fhir_store,
             sentia_service=sentia_service,
             auth_token=auth_token,
+            service_token=service_token,
         )
 
         results.append(result)
@@ -180,6 +182,7 @@ async def _import_single_appointment(
     fhir_store: FHIRStoreService,
     sentia_service: SentiaService,
     auth_token: Optional[str],
+    service_token: Optional[str] = None,
 ) -> AppointmentImportResult:
     """Import a single appointment."""
     warnings: list[str] = []
@@ -222,9 +225,9 @@ async def _import_single_appointment(
             fhir_store=fhir_store,
         )
 
-        # Step 3: Call Sentia to create GCal event (if auth_token provided)
+        # Step 3: Call Sentia to create GCal event (if auth_token or service_token provided)
         gcal_event_id: Optional[str] = None
-        if auth_token:
+        if auth_token or service_token:
             try:
                 gcal_result = await sentia_service.create_imported_appointment(
                     auth_token=auth_token,
@@ -237,6 +240,7 @@ async def _import_single_appointment(
                     reason=appointment.reason or appointment.visit_type,
                     is_virtual=appointment.is_virtual,
                     timezone=location_timezone,
+                    service_token=service_token,
                 )
                 gcal_event_id = gcal_result.gcal_event_id
                 if gcal_result.warnings:
@@ -245,7 +249,7 @@ async def _import_single_appointment(
                 warnings.append(f"Failed to create GCal event: {e}")
                 # Continue - encounter is still created
         else:
-            warnings.append("Skipped GCal event creation (no Firebase auth token)")
+            warnings.append("Skipped GCal event creation (no auth token)")
 
         return AppointmentImportResult(
             success=True,
