@@ -241,11 +241,8 @@ async def import_appointments(
             detail="Could not resolve organization_id and practitioner_role_id",
         )
 
-    if not auth_token:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Firebase authentication required for GCal event creation",
-        )
+    # Note: auth_token is optional - without it, GCal events won't be created
+    # Service tokens can still import appointments (FHIR Encounters only)
 
     try:
         result = await import_appointments_from_csv(
