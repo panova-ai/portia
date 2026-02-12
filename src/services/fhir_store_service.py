@@ -106,7 +106,9 @@ class FHIRStoreService:
                     # Fallback: if no _history found, try parts[1] for short format
                     if not resource_id and len(parts) >= 2:
                         resource_id = parts[1]
-                        # Map original fullUrl to new ID
+
+                    # Map original fullUrl to new ID
+                    if resource_id:
                         original_entries = transaction_bundle.get("entry", [])
                         if i < len(original_entries):
                             original_url = original_entries[i].get("fullUrl", "")
