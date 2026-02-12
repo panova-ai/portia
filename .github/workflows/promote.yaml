@@ -198,6 +198,19 @@ jobs:
           fi
           echo "url=$MS_URL" >> $GITHUB_OUTPUT
 
+      - name: Get Sentia Backend URL
+        id: sentia
+        run: |
+          SENTIA_URL=$(gcloud run services describe backend \
+            --region=${{ env.REGION }} \
+            --project=panova-prod \
+            --format="value(status.url)" 2>/dev/null || echo "")
+          if [ -z "$SENTIA_URL" ]; then
+            echo "Sentia backend not deployed yet, using placeholder"
+            SENTIA_URL="https://backend-placeholder.run.app"
+          fi
+          echo "url=$SENTIA_URL" >> $GITHUB_OUTPUT
+
       - name: Deploy to Cloud Run (prod)
         uses: google-github-actions/deploy-cloudrun@v2
         with:
@@ -209,5 +222,6 @@ jobs:
             GCP_PROJECT_ID=panova-prod
             GCP_REGION=${{ env.REGION }}
             MS_CONVERTER_URL=${{ steps.ms-converter.outputs.url }}
+            SENTIA_URL=${{ steps.sentia.outputs.url }}
             TEMP_BUCKET=panova-prod-portia-temp
             EXPORTS_BUCKET=panova-prod-portia-exports
