@@ -80,6 +80,15 @@ class FHIRStoreService:
                 status = response_info.get("status", "")
                 location = response_info.get("location", "")
 
+                # Debug: log response entry
+                logger.warning(
+                    "Bundle entry %d response: status=%s, location=%s, response_info=%s",
+                    i,
+                    status,
+                    location,
+                    response_info,
+                )
+
                 # Extract resource ID from location header
                 if location:
                     # Location format: ResourceType/id/_history/version
