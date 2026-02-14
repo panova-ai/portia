@@ -184,6 +184,20 @@ jobs:
           fi
           echo "url=$MS_URL" >> $GITHUB_OUTPUT
 
+      - name: Get Sentia Backend URL
+        id: sentia
+        run: |
+          # Get the Sentia backend URL from the deployed service
+          SENTIA_URL=$(gcloud run services describe backend \
+            --region=${{ env.REGION }} \
+            --project=${{ needs.determine-environment.outputs.project_id }} \
+            --format="value(status.url)" 2>/dev/null || echo "")
+          if [ -z "$SENTIA_URL" ]; then
+            echo "Sentia backend not deployed yet, using placeholder"
+            SENTIA_URL="https://backend-placeholder.run.app"
+          fi
+          echo "url=$SENTIA_URL" >> $GITHUB_OUTPUT
+
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v2
         with:
@@ -195,6 +209,7 @@ jobs:
             GCP_PROJECT_ID=${{ needs.determine-environment.outputs.project_id }}
             GCP_REGION=${{ env.REGION }}
             MS_CONVERTER_URL=${{ steps.ms-converter.outputs.url }}
+            SENTIA_URL=${{ steps.sentia.outputs.url }}
             TEMP_BUCKET=${{ needs.determine-environment.outputs.project_id }}-portia-temp
             EXPORTS_BUCKET=${{ needs.determine-environment.outputs.project_id }}-portia-exports
 

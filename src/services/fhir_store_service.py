@@ -80,13 +80,35 @@ class FHIRStoreService:
                 status = response_info.get("status", "")
                 location = response_info.get("location", "")
 
+                # Debug: log response entry
+                logger.warning(
+                    "Bundle entry %d response: status=%s, location=%s, response_info=%s",
+                    i,
+                    status,
+                    location,
+                    response_info,
+                )
+
                 # Extract resource ID from location header
                 if location:
-                    # Location format: ResourceType/id/_history/version
+                    # Location can be a full URL or ResourceType/id/_history/version
+                    # Full URL format: https://.../ResourceType/uuid/_history/...
+                    # We need to find the UUID before _history
                     parts = location.split("/")
-                    if len(parts) >= 2:
+
+                    # Find the index of _history and get the part before it
+                    resource_id = ""
+                    for idx, part in enumerate(parts):
+                        if part == "_history" and idx > 0:
+                            resource_id = parts[idx - 1]
+                            break
+
+                    # Fallback: if no _history found, try parts[1] for short format
+                    if not resource_id and len(parts) >= 2:
                         resource_id = parts[1]
-                        # Map original fullUrl to new ID
+
+                    # Map original fullUrl to new ID
+                    if resource_id:
                         original_entries = transaction_bundle.get("entry", [])
                         if i < len(original_entries):
                             original_url = original_entries[i].get("fullUrl", "")
