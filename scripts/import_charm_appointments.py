@@ -3,8 +3,8 @@
 Import CHARM EHR appointment CSV exports into Portia.
 
 This script is used by Panova staff to import appointment records exported from
-CHARM EHR. It resolves practitioner context from Sentia and uses service JWT
-authentication.
+CHARM EHR. It looks up practitioner context directly from FHIR and uses service
+JWT authentication.
 
 The import process:
 1. Parses CSV and matches/creates patients
@@ -15,8 +15,8 @@ Patients are NOT activated (no Firebase identity, no SMS).
 Use activate_imported_patients.py after provider review.
 
 Usage:
-    python scripts/import_charm_appointments.py <csv_file> <practitioner_email> --env dev
-    python scripts/import_charm_appointments.py appointments.csv john.doe@panova.health --env staging
+    python scripts/import_charm_appointments.py <csv_file> "Practitioner Name" --env dev
+    python scripts/import_charm_appointments.py appointments.csv "Kamen Penev" --env staging
 
 Requirements:
     - gcloud CLI authenticated with appropriate permissions
@@ -40,19 +40,16 @@ from google.cloud import secretmanager
 ENVIRONMENTS = {
     "dev": {
         "portia_url": "https://portia-mzpxirbrgq-uc.a.run.app",
-        "sentia_url": "https://backend-mzpxirbrgq-uc.a.run.app",
         "project_id": "panova-dev",
         "fhir_store": "projects/panova-dev/locations/us-central1/datasets/healthcare_dataset/fhirStores/fhir_store",
     },
     "staging": {
         "portia_url": "https://portia-yqadsx4ooa-uc.a.run.app",
-        "sentia_url": "https://backend-yqadsx4ooa-uc.a.run.app",
         "project_id": "panova-staging",
         "fhir_store": "projects/panova-staging/locations/us-central1/datasets/healthcare_dataset/fhirStores/fhir_store",
     },
     "prod": {
         "portia_url": "https://portia-prod.panova.health",
-        "sentia_url": "https://backend-prod.panova.health",
         "project_id": "panova-prod",
         "fhir_store": "projects/panova-prod/locations/us-central1/datasets/healthcare_dataset/fhirStores/fhir_store",
     },
@@ -61,7 +58,6 @@ ENVIRONMENTS = {
 # Service auth configuration
 SERVICE_AUTH_ISSUER = "panova-services"
 SERVICE_AUTH_AUDIENCE_PORTIA = "panova-portia"
-SERVICE_AUTH_AUDIENCE_SENTIA = "panova-backend"
 
 
 def get_jwt_secret(project_id: str) -> str:
@@ -92,66 +88,6 @@ def create_service_token(
     return jwt.encode(payload, secret, algorithm="HS256")
 
 
-def lookup_practitioner_by_email(
-    sentia_url: str,
-    token: str,
-    email: str,
-) -> dict[str, str | None]:
-    """
-    Look up practitioner by email via Sentia API.
-
-    Returns dict with practitioner_id and organization_id.
-    """
-    headers = {"Authorization": f"Bearer {token}"}
-
-    response = httpx.get(
-        f"{sentia_url}/practitioners",
-        headers=headers,
-        params={"email": email},
-        timeout=30.0,
-    )
-
-    if response.status_code == 404:
-        raise ValueError(f"Practitioner with email {email} not found")
-
-    response.raise_for_status()
-    data = response.json()
-
-    practitioners = data.get("entries", [data] if "id" in data else [])
-
-    if not practitioners:
-        raise ValueError(f"Practitioner with email {email} not found")
-
-    practitioner = practitioners[0]
-    practitioner_id = practitioner.get("id") or practitioner.get("fhir_practitioner_id")
-
-    if not practitioner_id:
-        raise ValueError(f"Could not get practitioner ID for {email}")
-
-    # Get practitioner's organizations
-    org_response = httpx.get(
-        f"{sentia_url}/practitioners/{practitioner_id}/organizations",
-        headers=headers,
-        timeout=30.0,
-    )
-
-    if org_response.status_code == 200:
-        org_data = org_response.json()
-        organizations = org_data.get("entries", [])
-        if organizations:
-            organization_id = organizations[0].get("id")
-        else:
-            organization_id = None
-    else:
-        organization_id = None
-
-    return {
-        "practitioner_id": practitioner_id,
-        "organization_id": organization_id,
-        "practitioner_name": practitioner.get("name"),
-    }
-
-
 def get_fhir_access_token() -> str:
     """Get Google Cloud access token for FHIR API."""
     credentials, _ = google.auth.default(
@@ -160,6 +96,68 @@ def get_fhir_access_token() -> str:
     auth_req = google.auth.transport.requests.Request()
     credentials.refresh(auth_req)
     return credentials.token  # type: ignore[return-value]
+
+
+def lookup_practitioner_by_name(
+    fhir_store: str,
+    name: str,
+) -> dict[str, str | None]:
+    """
+    Look up practitioner by name via FHIR.
+
+    Args:
+        fhir_store: Full FHIR store path
+        name: Practitioner name (e.g., "Kamen Penev")
+
+    Returns:
+        Dict with practitioner_id and display_name
+    """
+    access_token = get_fhir_access_token()
+    fhir_url = f"https://healthcare.googleapis.com/v1/{fhir_store}/fhir"
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/fhir+json",
+    }
+
+    # Search by name
+    response = httpx.get(
+        f"{fhir_url}/Practitioner",
+        headers=headers,
+        params={"name": name},
+        timeout=30.0,
+    )
+
+    if response.status_code != 200:
+        raise ValueError(f"FHIR search failed: {response.status_code} {response.text}")
+
+    bundle = response.json()
+    entries = bundle.get("entry", [])
+
+    if not entries:
+        raise ValueError(f"No practitioner found with name '{name}'")
+
+    if len(entries) > 1:
+        # List matches for user to choose
+        matches = []
+        for e in entries:
+            r = e.get("resource", {})
+            names = r.get("name", [])
+            display = names[0].get("text", "") if names else "Unknown"
+            matches.append(f"  - {display} (ID: {r.get('id')})")
+        raise ValueError(
+            f"Multiple practitioners found matching '{name}':\n" + "\n".join(matches)
+        )
+
+    practitioner = entries[0].get("resource", {})
+    practitioner_id = practitioner.get("id")
+    names = practitioner.get("name", [])
+    display_name = names[0].get("text", "") if names else None
+
+    return {
+        "practitioner_id": practitioner_id,
+        "display_name": display_name,
+    }
 
 
 def lookup_practitioner_role(
@@ -257,10 +255,10 @@ def main() -> None:
         epilog="""
 Examples:
     # Import a CHARM appointment CSV for a practitioner in dev environment
-    python scripts/import_charm_appointments.py appointments.csv john.doe@panova.health --env dev
+    python scripts/import_charm_appointments.py appointments.csv "Kamen Penev" --env dev
 
     # Import to staging environment
-    python scripts/import_charm_appointments.py appointments.csv jane.smith@panova.health --env staging
+    python scripts/import_charm_appointments.py appointments.csv "Jane Smith" --env staging
 
     # Import with explicit IDs (skips practitioner lookup)
     python scripts/import_charm_appointments.py appointments.csv --env dev \\
@@ -268,7 +266,7 @@ Examples:
         --practitioner-role-id 87654321-4321-4321-4321-cba987654321
 
     # Dry run to validate inputs
-    python scripts/import_charm_appointments.py appointments.csv john.doe@panova.health --env dev --dry-run
+    python scripts/import_charm_appointments.py appointments.csv "Kamen Penev" --env dev --dry-run
         """,
     )
 
@@ -279,9 +277,9 @@ Examples:
     )
 
     parser.add_argument(
-        "practitioner_email",
+        "practitioner_name",
         nargs="?",
-        help="Practitioner email (firstname.lastname@panova.health)",
+        help="Practitioner name (e.g., 'Kamen Penev')",
     )
 
     parser.add_argument(
@@ -327,11 +325,11 @@ Examples:
         print(f"Error: Expected CSV file, got: {args.file_path}", file=sys.stderr)
         sys.exit(1)
 
-    if not args.practitioner_email and not (
+    if not args.practitioner_name and not (
         args.organization_id and args.practitioner_role_id
     ):
         print(
-            "Error: Provide practitioner_email or both --org-id and --practitioner-role-id",
+            "Error: Provide practitioner_name or both --org-id and --practitioner-role-id",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -341,7 +339,7 @@ Examples:
     if args.verbose:
         print(f"Environment: {args.env}")
         print(f"Portia URL: {env_config['portia_url']}")
-        print(f"Sentia URL: {env_config['sentia_url']}")
+        print(f"FHIR Store: {env_config['fhir_store']}")
         print(f"File: {args.file_path}")
 
     # Read file content
@@ -370,36 +368,25 @@ Examples:
     practitioner_id = None
     practitioner_role_id = args.practitioner_role_id
 
-    if args.practitioner_email and not (organization_id and practitioner_role_id):
-        print(f"Looking up practitioner: {args.practitioner_email}...")
-
-        sentia_token = create_service_token(
-            jwt_secret,
-            SERVICE_AUTH_AUDIENCE_SENTIA,
-        )
+    if args.practitioner_name and not (organization_id and practitioner_role_id):
+        print(f"Looking up practitioner: {args.practitioner_name}...")
 
         try:
-            practitioner_info = lookup_practitioner_by_email(
-                env_config["sentia_url"],
-                sentia_token,
-                args.practitioner_email,
+            practitioner_info = lookup_practitioner_by_name(
+                env_config["fhir_store"],
+                args.practitioner_name,
             )
 
-            if not organization_id:
-                organization_id = practitioner_info.get("organization_id")
             practitioner_id = practitioner_info.get("practitioner_id")
 
             if args.verbose:
                 print(f"  Practitioner ID: {practitioner_id}")
-                print(f"  Organization ID: {organization_id}")
-                if practitioner_info.get("practitioner_name"):
-                    print(f"  Name: {practitioner_info['practitioner_name']}")
+                if practitioner_info.get("display_name"):
+                    print(f"  Name: {practitioner_info['display_name']}")
 
         except Exception as e:
             print(f"Error looking up practitioner: {e}", file=sys.stderr)
-            if not organization_id:
-                print("Provide --org-id to continue.", file=sys.stderr)
-                sys.exit(1)
+            sys.exit(1)
 
     # Look up PractitionerRole from FHIR (unless provided directly)
     if practitioner_role_id:
