@@ -225,3 +225,42 @@ jobs:
             SENTIA_URL=${{ steps.sentia.outputs.url }}
             TEMP_BUCKET=panova-prod-portia-temp
             EXPORTS_BUCKET=panova-prod-portia-exports
+
+  notify-teams:
+    needs: [promote, deploy-prod]
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+    steps:
+      - name: Send Teams notification
+        run: |
+          DEPLOY_RESULT="${{ needs.deploy-prod.result }}"
+          PROMOTE_RESULT="${{ needs.promote.result }}"
+
+          if [[ "$DEPLOY_RESULT" == "success" && "$PROMOTE_RESULT" == "success" ]]; then
+            icon="✅"
+            status="Production release completed"
+          else
+            icon="❌"
+            status="Production release failed"
+            if [[ "$PROMOTE_RESULT" != "success" ]]; then
+              status="Production release failed (promotion step)"
+            elif [[ "$DEPLOY_RESULT" != "success" ]]; then
+              status="Production release failed (deployment step)"
+            fi
+          fi
+
+          # Use heredoc to preserve actual line breaks for Teams
+          text=$(cat <<EOF
+          ${icon} **Portia - ${status}**
+
+          • **Repo:** $GITHUB_REPOSITORY<br>
+          • **Ref:** $GITHUB_REF_NAME<br>
+          • **Commit:** ${GITHUB_SHA}<br>
+          • **Run:** [View workflow run](https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)
+          EOF
+          )
+
+          payload=$(jq -n --arg text "$text" '{text: $text}')
+          curl -sS -H "Content-Type: application/json" -d "$payload" "$TEAMS_WEBHOOK_URL"
